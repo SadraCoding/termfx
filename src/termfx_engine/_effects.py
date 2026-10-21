@@ -392,3 +392,124 @@ class Fx:
             k = 1 - dist / 6
             return (col_seed + t * 0.05) % 1.0, 0.6 + k * 0.8
         return col_seed, 0.25
+
+    # Additional low-cost fields. Each method returns (palette position, brightness).
+    def fx_ribbons(self, r, c, t):
+        y = r / max(self.H, 1)
+        v = 0.5 + 0.32 * math.sin(c * 0.07 + math.sin(y * 8 + t) * 2 - t)
+        v += 0.15 * math.sin(c * 0.035 - y * 12 + t * 0.7)
+        return v % 1.0, 0.45 + 0.55 * (0.5 + 0.5 * math.sin(y * 10 + c * .03 - t))
+
+    def fx_embers2(self, r, c, t):
+        h = _hash2(c // 2, int((r + t * (3 + _hash2(c, 1) * 8)) / 3))
+        glow = max(0, 1 - abs(h - .82) * 7)
+        return (0.04 + r / max(self.H, 1) * .16 + h * .12) % 1, .25 + glow * .9
+
+    def fx_rainbowroad(self, r, c, t):
+        y = r / max(self.H, 1)
+        curve = math.sin(c * .035 + t) * .18
+        band = (y * 3 + curve + t * .12) % 1
+        return band, .45 + .55 * max(0, 1 - abs((band * 2 % 1) - .5) * 2)
+
+    def fx_spiralgalaxy(self, r, c, t):
+        x, y = c - self.W / 2, (r - self.H / 2) * 2
+        d, a = math.hypot(x, y), math.atan2(y, x)
+        arm = max(0, math.cos(a * 4 - d * .13 + t * 1.4))
+        return (a / (2 * math.pi) + d / max(self.W, 1) * .35 + t * .04) % 1, .3 + arm * max(0, 1 - d / self.W) * .9
+
+    def fx_waterfall(self, r, c, t):
+        stream = _hash2(c // 3, 0)
+        flow = (r * .3 + t * (2 + stream * 5) + stream * 20 + math.sin(c * .2) * 2) % 8
+        return .52 + stream * .15, .3 + max(0, 1 - flow / 8) * .8
+
+    def fx_sandstorm(self, r, c, t):
+        n = _hash2(c + int(t * 12), r + int(t * 4))
+        drift = _hash2(c + int(t * 5), r // 2)
+        return (.08 + n * .16) % 1, .25 + (0.65 if drift > .78 else n * .25)
+
+    def fx_aurora2(self, r, c, t):
+        y = r / max(self.H, 1)
+        curtain = math.sin(c * .045 + math.sin(c * .017 + t * .7) * 3 + t)
+        return (.43 + y * .45 + curtain * .12) % 1, .25 + max(0, curtain) * .85
+
+    def fx_geometric(self, r, c, t):
+        x, y = c - self.W / 2, (r - self.H / 2) * 2
+        a = math.atan2(y, x) + t * .25
+        d = math.hypot(x, y)
+        facet = abs(math.sin(a * 6 + d * .08))
+        return (a / (2 * math.pi) + t * .05) % 1, .35 + facet * .65
+
+    def fx_hexgrid(self, r, c, t):
+        x, y = c / 4, r / 2
+        edge = min(abs(math.sin(x * math.pi)), abs(math.sin((x * .5 + y) * math.pi)))
+        pulse = .5 + .5 * math.sin(t * 2 - x * .3 - y * .5)
+        return (x * .03 + y * .06 + t * .04) % 1, .25 + (1 - edge) * (.35 + pulse * .6)
+
+    def fx_mandala(self, r, c, t):
+        x, y = c - self.W / 2, (r - self.H / 2) * 2
+        a, d = math.atan2(y, x), math.hypot(x, y) / max(self.W, 1)
+        petal = .5 + .5 * math.cos(a * 10 + math.sin(d * 12 - t) * 2)
+        return (petal + d * .3 + t * .06) % 1, .3 + petal * .7
+
+    def fx_clouds(self, r, c, t):
+        y = r / max(self.H, 1)
+        n = (math.sin(c * .035 + t * .2) + math.sin(c * .073 - y * 8 + t * .3) + math.sin(c * .016 + y * 13)) / 3
+        return (.55 + y * .25 + n * .12) % 1, .3 + max(0, n) * .6
+
+    def fx_pulsegrid(self, r, c, t):
+        y = (r + 1) / max(self.H, 1)
+        horizon = (c / max(self.W, 1) - .5) / y
+        line = abs(math.sin(horizon * 5)) * abs(math.sin((1 / y + t) * 2))
+        return (horizon * .04 + t * .04) % 1, .3 + line * .8
+
+    def fx_starfield(self, r, c, t):
+        x = int(c + t * (2 + _hash2(c, r) * 8))
+        star = _hash2(x // 3, r // 2)
+        twinkle = .5 + .5 * math.sin(t * (2 + star * 7) + star * 40)
+        return star, .2 + (twinkle * .9 if star > .91 else .08)
+
+    def fx_magnetic(self, r, c, t):
+        x, y = c - self.W / 2, (r - self.H / 2) * 2
+        a = math.atan2(y, x)
+        field = abs(math.sin(a * 5 + math.sin(x * .03 + t) * 2 + math.hypot(x, y) * .025))
+        return (a / (2 * math.pi) + .5 + t * .04) % 1, .3 + field * .7
+
+    def fx_firework(self, r, c, t):
+        best, hue = 0, .1
+        for i in range(5):
+            phase = (t * .35 + i * .23) % 1
+            cx = (i * .237 + .12) * self.W
+            cy = (.2 + i * .11) * self.H
+            radius = phase * min(self.W, self.H) * .45
+            d = math.hypot(c - cx, (r - cy) * 2)
+            spark = max(0, 1 - abs(d - radius) / 1.5) * (1 - phase)
+            if spark > best: best, hue = spark, (i * .19 + phase * .2) % 1
+        return hue, .2 + best
+
+    def fx_ink(self, r, c, t):
+        x, y = c / max(self.W, 1), r / max(self.H, 1)
+        field = math.sin(x * 11 + t * .35) + math.cos(y * 13 - t * .28) + math.sin((x + y) * 17 + t * .2)
+        spread = .5 + .5 * math.sin(field * 1.5)
+        return (.72 - spread * .55 + t * .02) % 1, .25 + spread * .75
+
+    def fx_barcode(self, r, c, t):
+        x = c + int(t * 5)
+        stripe = _hash2(x // 2, 3) > .52
+        scan = max(0, 1 - abs(r - (t * 7) % max(self.H, 1)) / 3)
+        return (x * .013) % 1, (.72 if stripe else .2) + scan * .5
+
+    def fx_topography(self, r, c, t):
+        field = math.sin(c * .055 + t * .2) + math.cos(r * .22 - t * .12) + math.sin((c + r * 2) * .035)
+        contour = .5 + .5 * math.cos(field * 5)
+        return (field * .1 + .35 + t * .025) % 1, .25 + contour * .7
+
+    def fx_twinkle(self, r, c, t):
+        seed = _hash2(c // 2, r // 2)
+        shine = .5 + .5 * math.sin(t * (1 + seed * 8) + seed * 90)
+        return seed, .2 + (shine * .9 if seed > .72 else .08)
+
+    def fx_waveform(self, r, c, t):
+        y = r - self.H / 2
+        amp = math.sin(c * .08 + t * 2) * self.H * .2 + math.sin(c * .19 - t) * self.H * .1
+        d = abs(y - amp)
+        return (c * .012 + t * .07) % 1, .25 + max(0, 1 - d / 3) * .9

@@ -226,7 +226,7 @@ EOF
   cat <<EOF
 
   ${CB}Features & commands${C0}
-    ${CC}termfx effect list${C0}                 57 animated effects (aurora fire matrix dna tunnel …)
+    ${CC}termfx effect list${C0}                 list all animated effects
     ${CC}termfx effect next${C0}               cycle through effects live
     ${CC}termfx effect info NAME${C0}          details + recommended palette
     ${CC}termfx palette list${C0}              66 colour palettes
@@ -242,6 +242,11 @@ EOF
     ${CC}termfx randomize${C0}                  instant random look
     ${CC}termfx profile save work${C0}         save/load config profiles
     ${CC}termfx --help${C0}                     full feature list
+
+  ${CB}Available effects${C0} (76 effects, plus the random selector):
+EOF
+  "$BIN_DIR/termfx" effect list
+  cat <<EOF
 
   ${CB}Quick tips${C0}
     ${CC}termfx starship theme developer-forge${C0} named Starship theme (14 choices: termfx starship theme list)

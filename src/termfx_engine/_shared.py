@@ -41,6 +41,10 @@ EFFECTS = (
     "prism", "metaballs", "noise", "stripe", "orbit", "shatter",
     "dna", "fireflies", "crystal", "tunnel", "lissajous", "circuit",
     "sonar", "phosphor", "strobe", "float", "morphean", "pixelrain",
+    "ribbons", "embers2", "rainbowroad", "spiralgalaxy", "waterfall",
+    "sandstorm", "aurora2", "geometric", "hexgrid", "mandala",
+    "clouds", "pulsegrid", "starfield", "magnetic", "firework",
+    "ink", "barcode", "topography", "twinkle", "waveform",
     "random",
 )
 EFFECT_DESC = {
@@ -72,6 +76,16 @@ EFFECT_DESC = {
     "sonar": "pulsing sonar rings", "phosphor": "old CRT phosphor decay",
     "strobe": "rapid strobe flashes", "float": "floating bubbles",
     "morphean": "morphean hexagonal warps", "pixelrain": "pixel-grid rain columns",
+    "ribbons": "layered flowing aurora ribbons", "embers2": "dense rising ember field",
+    "rainbowroad": "bright winding rainbow bands", "spiralgalaxy": "multi-arm rotating galaxy",
+    "waterfall": "cascading water curtains", "sandstorm": "wind-driven desert grains",
+    "aurora2": "shimmering polar light curtains", "geometric": "rotating geometric facets",
+    "hexgrid": "glowing animated hexagonal grid", "mandala": "radial mandala symmetry",
+    "clouds": "slow billowing cloud layers", "pulsegrid": "pulsing perspective grid",
+    "starfield": "stars drifting through space", "magnetic": "curved magnetic field lines",
+    "firework": "bursts of expanding fireworks", "ink": "ink spreading through water",
+    "barcode": "scanning barcode bands", "topography": "animated topographic contours",
+    "twinkle": "soft random twinkling lights", "waveform": "layered audio waveform bands",
     "random": "pick a random effect each start",
 }
 PALETTES = {
@@ -163,6 +177,13 @@ EFFECT_PALETTE = {
     "sonar": "photon", "phosphor": "matrix", "strobe": "neon-noir",
     "float": "candy", "morphean": "amethyst", "pixelrain": "cyberpunk",
     "random": "catppuccin",
+    "ribbons": "aurora", "embers2": "fire", "rainbowroad": "rainbow",
+    "spiralgalaxy": "cosmic", "waterfall": "ocean", "sandstorm": "desert",
+    "aurora2": "polar", "geometric": "spectrum", "hexgrid": "toxic",
+    "mandala": "ultraviolet", "clouds": "twilight", "pulsegrid": "cyberpunk",
+    "starfield": "photon", "magnetic": "electric", "firework": "flamingo",
+    "ink": "ink", "barcode": "mono", "topography": "forest",
+    "twinkle": "candy", "waveform": "synthwave",
 }
 PAUSE_CMDS = ("vim,nvim,vi,view,nano,micro,hx,helix,emacs,kak,less,more,most,man,htop,btop,top,"
               "bpytop,btm,glances,tmux,screen,zellij,mc,ranger,yazi,nnn,lf,lazygit,lazydocker,k9s,"

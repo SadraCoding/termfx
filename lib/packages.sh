@@ -81,6 +81,28 @@ fetch() { # url dest
   else return 1; fi
 }
 
+font_has_v3_glyphs() {
+  have fc-list && have fc-query && have python3 || return 1
+  fc-list 2>/dev/null | grep -qi 'JetBrainsMono.*Nerd\|JetBrainsMonoNL\? Nerd' || return 1
+  local font_file charset
+  font_file=$(fc-match -f '%{file}' 'JetBrainsMono Nerd Font' 2>/dev/null) || return 1
+  [[ -r $font_file ]] || return 1
+  charset=$(fc-query -f '%{charset}' "$font_file" 2>/dev/null) || return 1
+  python3 - "$charset" <<'PY'
+import sys
+try:
+    ranges = []
+    for item in sys.argv[1].split():
+        ends = item.split("-", 1)
+        ranges.append((int(ends[0], 16), int(ends[-1], 16)))
+    # U+F01C5 is a current Material Design Nerd Font glyph. Its presence
+    # distinguishes Nerd Fonts v3+ from fonts that lost MDI glyphs in v3.
+    raise SystemExit(0 if any(lo <= 0xF01C5 <= hi for lo, hi in ranges) else 1)
+except (ValueError, IndexError):
+    raise SystemExit(1)
+PY
+}
+
 gh_arch() { # echoes tag per tool
   local m; m=$(uname -m)
   case $1:$m in
@@ -163,23 +185,38 @@ install_packages() {
 }
 
 install_font() {
-  if have fc-list && fc-list 2>/dev/null | grep -qi "JetBrainsMono.*Nerd\|JetBrainsMonoNL\? Nerd"; then ok "JetBrainsMono Nerd Font already present"; return 0; fi
+  if font_has_v3_glyphs; then ok "JetBrainsMono Nerd Font v3+ with current icon glyphs already present"; return 0; fi
   if [[ $DO_FONT == auto ]] && { [[ -n ${SSH_CONNECTION:-} ]] || [[ -z ${DISPLAY:-}${WAYLAND_DISPLAY:-} && ${XDG_SESSION_TYPE:-tty} != wayland && ${XDG_SESSION_TYPE:-tty} != x11 ]]; }; then
     info "headless/SSH session: skipping the font (install it on the machine that shows the terminal, or use --font)"; return 0
   fi
-  if [[ -n $PM && $NO_PRIV == 0 && -n $(pkg_name font) ]]; then try_pkg font && return 0; fi
+  if [[ ${DO_PKGS:-1} == 1 && -n $PM && $NO_PRIV == 0 && -n $(pkg_name font) ]]; then
+    try_pkg font && font_has_v3_glyphs && { ok "Nerd Font v3+ icon glyphs verified"; return 0; }
+  fi
   info "downloading JetBrainsMono Nerd Font (user fonts)"
   local tmp; tmp=$(mktemp -d)
-  if fetch "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "$tmp/f.txz"; then
+  if fetch "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "$tmp/f.txz" \
+      && tar -tJf "$tmp/f.txz" >/dev/null 2>&1; then
     mkdir -p "$FONT_DIR"
     if ! tar -xJf "$tmp/f.txz" -C "$FONT_DIR" 2>/dev/null; then
       python3 -c 'import sys,tarfile; tarfile.open(sys.argv[1]).extractall(sys.argv[2])' "$tmp/f.txz" "$FONT_DIR" 2>/dev/null || { warn "could not unpack the font"; rm -rf "$tmp"; return 1; }
     fi
     find "$FONT_DIR" -type f ! -iname '*.ttf' ! -iname '*.otf' -delete 2>/dev/null || true
+    local fonts; fonts=$(find "$FONT_DIR" -type f \( -iname '*.ttf' -o -iname '*.otf' \) -print -quit)
+    if [[ -z $fonts ]]; then warn "the downloaded archive contained no usable font files"; rm -rf "$tmp"; return 1; fi
     have fc-cache && fc-cache -f "$FONT_DIR" >/dev/null 2>&1 || true
-    ok "font installed to $FONT_DIR - select 'JetBrainsMono Nerd Font' in your terminal if it isn't automatic"
-  else warn "font download failed (offline?) - get it from nerdfonts.com"; fi
-  rm -rf "$tmp"
+    rm -rf "$tmp"
+    if font_has_v3_glyphs; then
+      ok "Nerd Font v3+ installed and current icon glyphs verified in $FONT_DIR"
+      info "select 'JetBrainsMono Nerd Font' in your terminal if it is not selected automatically"
+      return 0
+    fi
+    warn "font files were downloaded, but fontconfig cannot find the required v3 icon glyph; refresh the terminal font cache and select JetBrainsMono Nerd Font"
+    return 1
+  else
+    warn "Nerd Font download or archive validation failed; check network access and try again"
+    rm -rf "$tmp"
+    return 1
+  fi
 }
 
 

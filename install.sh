@@ -174,8 +174,8 @@ do_install() {
 
   step "Nerd Font"
   if [[ $DO_FONT == 0 ]]; then info "skipped (--no-font)"
-  elif [[ $DO_FONT == 1 ]]; then install_font
-  elif ((DO_PKGS)); then install_font
+  elif [[ $DO_FONT == 1 ]]; then install_font || warn "font setup failed; continuing with icons disabled until a Nerd Font v3+ is selected"
+  elif ((DO_PKGS)); then install_font || warn "font setup failed; continuing with icons disabled until a Nerd Font v3+ is selected"
   else info "skipped (--no-packages; pass --font to force)"; fi
 
   step "Resetting old terminal customizations"

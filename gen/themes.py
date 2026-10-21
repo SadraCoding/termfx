@@ -102,7 +102,8 @@ ROWS = {  # name: (icon, fastfetch type, colour role, extra)
  "gpu": (0xf0379, "gpu", "mauve", {}), "disk": (0xf0249, "disk", "blue", {"folders": "/"}),
  "memory": (0xf2db, "memory", "sky", {}), "packages": (0xf487, "packages", "teal", {}),
  "battery": (0xf0079, "battery", "green", {}), "local_ip": (0xf0a5f, "localip", "yellow", {}),
- "colors": (0xf53f, "colors", "blue", {}),
+ # Font Awesome paintbrush; U+F53F was a legacy Nerd Font MDI slot removed in v3.
+ "colors": (0xf1fc, "colors", "blue", {}),
 }
 DEFAULT_ROWS = "user hname uptime distro kernel wm desktop term shell cpu disk memory"
 COMPACT_ROWS = "user distro kernel wm shell cpu memory"

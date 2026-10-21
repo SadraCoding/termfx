@@ -3,9 +3,9 @@ activate_font() {
   local name="JetBrainsMono Nerd Font" did=0 u gpath d
   # never point the terminal at a font that is not installed (e.g. --no-font / --no-packages):
   # the user would get a fallback font and broken icons
-  if have fc-list && ! fc-list 2>/dev/null | grep -qi "JetBrainsMono.*Nerd"; then
-    warn "$name is not installed - leaving the terminal font alone"
-    info "install it (nerdfonts.com), pick it in your terminal, then run: termfx set icons true"
+  if ! font_has_v3_glyphs; then
+    warn "$name v3+ with current icon glyphs is not installed - leaving the terminal font alone"
+    info "install the latest Nerd Font, pick it in your terminal, then run: termfx set icons true"
     info "until then a plain prompt (no icons, still with folder + clock) is used"
     "$BIN_DIR/termfx" set icons false >/dev/null 2>&1 || true
     return 0

@@ -40,7 +40,7 @@ ${B}ART${Z}  (your own ASCII - any size, thousands of lines are fine)
   termfx art info [NAME]                size / fitting details
   Multi-frame animation: put a line  ---FRAME---  between frames.
 
-${B}HEADER${Z}  (the animated ASCII at the top — 57 effects, 66 palettes)
+${B}HEADER${Z}  (the animated ASCII at the top — all available effects and palettes)
   termfx effect NAME|list|next|prev   set or cycle through effects
   termfx effect info NAME             show details about an effect
   termfx palette NAME|list|next|prev  set or cycle through palettes (or "#hex,#hex")
@@ -51,6 +51,8 @@ ${B}HEADER${Z}  (the animated ASCII at the top — 57 effects, 66 palettes)
   termfx rotate on|off [SECS]        auto-rotate effects/palettes
   termfx glitch on|off              toggle random glitch distortions (off by default)
   Extra knobs:  termfx set sparkle true | vignette true | intensity 1.4 | speed 1.5
+  Available effects:
+$("$ENGINE" list effects | sed 's/^/    /')
 
 ${B}SHELL LOOK${Z}  (prompt + info panel + colours)
   termfx theme list|NAME                catppuccin tokyonight dracula nord gruvbox rosepine onedark mono
