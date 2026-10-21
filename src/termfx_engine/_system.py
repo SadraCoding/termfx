@@ -42,6 +42,8 @@ def load_config():
                     v = v[1:v.index(v[0], 1)]
                 else:                                              # unquoted: strip a trailing " # comment"
                     v = re.sub(r"\s+#.*$", "", v).strip()
+                    if v == "#" or v.startswith(("# ", "#\t")):  # empty value followed by a comment
+                        v = ""
                 cfg[k.strip().lower()] = v
     except OSError:
         pass

@@ -5,7 +5,7 @@
 ## Highlights
 
 - 76 animated effects plus a random selector, from aurora, fire, matrix rain, and metaballs to mandalas, starfields, waterfalls, and waveforms.
-- 66 built-in colour palettes, with automatic effect matching and custom hex colours.
+- 66 built-in colour palettes, with automatic effect matching and custom hex colours. The installer lists every effect and every palette (stops, colour preview, hex values) so you can pick by number.
 - Animated ASCII art, multi-frame art, built-in examples, and image-to-ASCII helpers when optional image tools are installed.
 - System-information panels, Fastfetch presets, Starship themes, prompt styles, profiles, and shell completions.
 - Live effect and palette changes, terminal-size handling, pause rules for full-screen programs, and diagnostics.
@@ -69,6 +69,10 @@ termfx doctor                 # inspect terminal, config, and optional tools
 ```
 
 The same operations work on the configuration directly, for example `termfx set speed 1.3`, `termfx set fps 24`, or `termfx rotate on 120` to cycle effects every 120 seconds. Use `termfx config` to inspect settings and `termfx status` to see current state.
+
+While a command runs, the header is hidden so the command can use the whole screen and its scrollback (output is never cut off or drawn over). **If the output reaches the bottom of the screen, the header stays hidden until you run `clear` (or press Ctrl-L).** Otherwise it comes back at the next prompt.
+
+Set `pause = never` in the config if you want the header to stay on screen while commands run.
 
 ### Art
 

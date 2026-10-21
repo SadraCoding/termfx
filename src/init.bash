@@ -43,24 +43,70 @@ if [[ $TFX_PROMPT != off ]] && command -v starship >/dev/null 2>&1 && [[ -z ${PO
 fi
 
 # ---- animated header
-__termfx_cls() { local p h=0 par; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h =~ ^[0-9]+$ ]] || h=0; printf '\e[2J\e[%d;1H' $((h+1)); }
+# Header held hidden after a big-output command: `clear` / Ctrl-L brings it back.
+__termfx_resume_header() {
+  local p h par i
+  [[ -n ${__TFX_HELD:-} ]] || return 0
+  __TFX_HELD=
+  [[ -e ${TERMFX_FLAG:-/nonexistent} ]] && rm -f -- "$TERMFX_FLAG"
+  for ((i=0; i<60; i++)); do               # wait (max ~1.5s) until the engine has re-reserved its rows
+    read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
+    [[ ${h:-0} =~ ^[1-9][0-9]*$ ]] && return 0
+    sleep 0.025
+  done
+}
+__termfx_cls() { local p h=0 par; __termfx_resume_header; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h =~ ^[0-9]+$ ]] || h=0; printf '\e[2J\e[%d;1H' $((h+1)); }
 clear() { if [[ -n ${TERMFX_FLAG:-} ]]; then __termfx_cls; else command clear "$@"; fi; }
+__termfx_hide_header() {
+  local p h par i
+  [[ -n ${TERMFX_FLAG:-} && -r $TERMFX_FLAG.state ]] || return 0
+  read -r p h par < "$TERMFX_FLAG.state"
+  [[ ${h:-0} =~ ^[0-9]+$ ]] && ((h > 0)) || return 0
+  local hh=$h
+  : > "$TERMFX_FLAG"
+  for ((i=0; i<40; i++)); do
+    read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
+    if [[ ${h:-0} == 0 ]]; then            # engine is idle: erase the header rows once more so no frame can linger
+      printf '\e7\e[r\e[1;1H'; for ((i=0; i<hh; i++)); do printf '\e[2K'; ((i + 1 < hh)) && printf '\e[1B'; done; printf '\e8'
+      return 0
+    fi
+    sleep 0.025
+  done
+  h=$hh
+  # Fallback for an old or unresponsive engine: make room before starting output.
+  printf '\e7\e[r\e[1;1H'
+  for ((i=0; i<${h:-0}; i++)); do
+    printf '\e[2K'
+    ((i + 1 < h)) && printf '\e[1B'
+  done
+  printf '\e8\e[r'
+}
 
+# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
+__termfx_screen_full() {
+  local pos r rows=${LINES:-0}
+  printf '\e[6n' >/dev/tty 2>/dev/null || return 1
+  IFS= read -rs -t 0.3 -d R pos </dev/tty 2>/dev/null || return 1
+  r=${pos##*[}; r=${r%;*}
+  [[ $r =~ ^[0-9]+$ ]] || return 1
+  ((rows > 0)) || rows=$(tput lines 2>/dev/null || echo 0)
+  ((rows > 0 && r >= rows))
+}
+# The header is hidden while a command runs, so its output can use the whole screen (and scrollback).
 __termfx_preexec() {
   __TFX_CMD_START=$SECONDS
   [[ -n ${TERMFX_FLAG:-} ]] || return 0
-  case ${__TFX_MODE:-tui} in never) return 0 ;; always) : > "$TERMFX_FLAG"; return 0 ;; esac
-  local -a w; read -ra w <<<"$1"
-  local i=0
-  while ((i < ${#w[@]})); do
-    case ${w[i]##*/} in sudo|doas|command|env|exec|nohup|time|builtin|nice|setsid|-*|*=*) i=$((i+1)) ;; *) break ;; esac
-  done
-  local c=${w[i]:-}; c=${c##*/}
-  [[ -n $c && ${__TFX_CMDS:-} == *",$c,"* ]] && : > "$TERMFX_FLAG"
+  [[ ${__TFX_MODE:-auto} == never ]] && return 0
+  case $1 in clear|clear\ *) return 0 ;; esac
+  __termfx_hide_header
   return 0
 }
 __termfx_post() {
-  [[ -e ${TERMFX_FLAG:-/nonexistent} ]] && rm -f -- "$TERMFX_FLAG"
+  if [[ -n ${TERMFX_FLAG:-} && -z ${__TFX_HELD:-} ]]; then
+    if __termfx_screen_full; then                      # output reached the bottom: stay hidden until clear
+      __TFX_HELD=1; [[ -e $TERMFX_FLAG ]] || __termfx_hide_header
+    elif [[ -e $TERMFX_FLAG ]]; then rm -f -- "$TERMFX_FLAG"; fi
+  fi
   if [[ ${TFX_NOTIFY} == true && -n ${__TFX_CMD_START:-} ]] && (( SECONDS - __TFX_CMD_START >= TFX_NOTIFY_AFTER )); then
     local elapsed=$(( SECONDS - __TFX_CMD_START ))
     command -v notify-send >/dev/null 2>&1 && notify-send -t 5000 "termfx" "Command finished (${elapsed}s)" 2>/dev/null &
@@ -102,9 +148,9 @@ __termfx_boot() {
     return 0
   fi
   export TERMFX_SEED=$RANDOM$RANDOM
-  local out h rows cols mode cmds tip
+  local out h rows cols mode tip
   out=$(command termfx-engine height 2>/dev/null) || return 0
-  read -r h rows cols mode cmds <<<"$out"
+  read -r h rows cols mode <<<"$out"
   if ! [[ ${h:-0} =~ ^[0-9]+$ ]] || (( h <= 0 )); then
     tip="${XDG_CACHE_HOME:-$HOME/.cache}/termfx/.hint-size"
     if [[ ! -f $tip && -t 2 ]] && [[ ${cols:-0} =~ ^[0-9]+$ && ${rows:-0} =~ ^[0-9]+$ ]] \
@@ -115,7 +161,7 @@ __termfx_boot() {
     fi
     return 0
   fi
-  __TFX_MODE=${mode:-tui}; __TFX_CMDS=",${cmds:-},"
+  __TFX_MODE=${mode:-auto}; __TFX_HELD=
   export TERMFX_FLAG="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/termfx-$UID-$$" TERMFX_ACTIVE=1
   rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"
   printf '\e[2J\e[%d;%dr\e[%d;1H' $((h+1)) "${rows:-${LINES:-40}}" $((h+1))

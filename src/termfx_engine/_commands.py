@@ -8,7 +8,7 @@ Options:   --set key=value (repeatable)
 
 from ._shared import (
     ANSI_RE, ART_DIR, CACHE_DIR, CONF_FILE, EFFECTS,
-    EFFECT_DESC, EFFECT_PALETTE, OVERRIDES, PALETTES, PAUSE_CMDS,
+    EFFECT_DESC, EFFECT_PALETTE, OVERRIDES, PALETTES,
     UTF8, VERSION, errno, glob, os,
     random, re, select, shutil, signal,
     sys, time,
@@ -42,6 +42,15 @@ def write_state(flag, H, parent):
     except OSError:
         pass
 
+def hide_header(out, height):
+    """Release the reserved header area and erase only its rows."""
+    out.write("\x1b7\x1b[r\x1b[1;1H")
+    for row in range(max(0, height)):
+        out.write("\x1b[2K")
+        if row + 1 < height:
+            out.write("\x1b[1B")
+    out.write("\x1b8\x1b[r")
+
 def cmd_run(flag, parent):
     out = Out()
     stop = {"v": False, "reload": False}
@@ -57,6 +66,7 @@ def cmd_run(flag, parent):
     last_size = None
     rend = None
     region_H = 0
+    paused = False
     first = True
     t0 = time.time()
     last_rotate = t0
@@ -64,6 +74,23 @@ def cmd_run(flag, parent):
         while not stop["v"] and alive(parent):
             try:
                 rebuild = False
+                resuming = False
+                if os.path.exists(flag):
+                    if not paused:
+                        if region_H:
+                            hide_header(out, region_H)
+                            region_H = 0
+                        paused = True
+                        write_state(flag, 0, parent)
+                elif paused:
+                    paused = False
+                    resuming = True
+                    rebuild = True
+                if paused:
+                    # A command is printing: never touch the screen, the scroll region or the
+                    # layout now (a pending reload/resize is applied when the header returns).
+                    time.sleep(0.1)
+                    continue
                 if stop["reload"]:
                     stop["reload"] = False
                     cfg = load_config()
@@ -98,6 +125,9 @@ def cmd_run(flag, parent):
                         if first:
                             out.write("\x1b7\x1b[%d;%dr\x1b8" % (new.H + 1, size[1]))
                             region_H = new.H
+                        elif new.H != region_H and resuming:
+                            out.write("\x1b7\x1b[%d;%dr\x1b8" % (new.H + 1, size[1]))
+                            region_H = new.H
                         elif new.H != region_H:
                             out.write("\x1b[2J\x1b[%d;%dr\x1b[%d;1H" % (new.H + 1, size[1], new.H + 1))
                             region_H = new.H
@@ -105,7 +135,7 @@ def cmd_run(flag, parent):
                             out.write("\x1b7\x1b[%d;%dr\x1b8" % (new.H + 1, size[1]))
                         write_state(flag, new.H, parent)
                     first = False
-                if rend is None or os.path.exists(flag):
+                if rend is None or paused or os.path.exists(flag):
                     time.sleep(0.25)
                     continue
                 t1 = time.time()
@@ -141,8 +171,8 @@ def cmd_height(cfg):
             H = lay.H if lay else 0
         except Exception:
             log_error()
-    cmds = [c.strip() for c in re.split(r"[,\s]+", PAUSE_CMDS + "," + cfg["pause_cmds"]) if c.strip()]
-    print(H, rows, cols, cfg["pause"].strip().lower() or "tui", ",".join(cmds))
+    pm = "never" if (cfg["pause"].strip().lower() == "never") else "auto"
+    print(H, rows, cols, pm)
     return 0
 
 def cmd_preview(cfg, secs):
@@ -280,18 +310,29 @@ def cmd_palette_show(name):
         r, g, b = hex_rgb(s)
         bar += "\x1b[48;2;%d;%d;%dm  " % (r, g, b)
     bar += "\x1b[0m"
-    print("preview : %s" % bar)
+    if sys.stdout.isatty():                 # colour swatches only on a terminal
+        print("preview : %s" % bar)
     # gradient test strip
     lut = build_lut(stops, 64)
     grad = ""
     for r, g, b in lut:
         grad += "\x1b[48;2;%d;%d;%dm " % (r, g, b)
     grad += "\x1b[0m"
-    print("gradient: %s" % grad)
+    if sys.stdout.isatty():                 # the strip is made of colour codes: skip it when piped
+        print("gradient: %s" % grad)
     # used by effects
     used_by = [e for e, p in EFFECT_PALETTE.items() if p == name]
     if used_by:
         print("used by : %s" % ", ".join(used_by))
+    return 0
+
+def cmd_palette_catalog():
+    """List every palette with its number of stops and exact colour values (fits 80 columns)."""
+    print("Palettes: %d" % len(PALETTES))
+    w = max(len(n) for n in PALETTES) + 1
+    for name in sorted(PALETTES):
+        stops = PALETTES[name].split()
+        print("%-*s %d  %s" % (w, name, len(stops), " ".join("#" + s for s in stops)))
     return 0
 
 def cmd_info_items():
@@ -358,9 +399,19 @@ def main(argv):
         what = args[0] if args else "effects"
         if what == "effects":
             for e in EFFECTS:
-                print("%-14s %s" % (e, EFFECT_DESC.get(e, "")))
+                palette = EFFECT_PALETTE.get(e, "catppuccin")
+                print("%-14s %-34s palette: %s" % (e, EFFECT_DESC.get(e, ""), palette))
         elif what == "palettes":
             print("\n".join(sorted(PALETTES)))
+        elif what == "effect-menu":
+            for e in EFFECTS:
+                print("%s\t%s\t%s" % (e, EFFECT_DESC.get(e, ""), EFFECT_PALETTE.get(e, "catppuccin")))
+        elif what == "palette-menu":
+            for name in sorted(PALETTES):
+                stops = PALETTES[name].split()
+                print("%s %d %s" % (name, len(stops), " ".join(stops)))
+        elif what in ("palette-details", "palette-info"):
+            return cmd_palette_catalog()
         elif what == "art":
             print("\n".join(sorted(os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(ART_DIR, "*.txt")))))
         elif what == "info-items":

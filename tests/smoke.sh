@@ -46,6 +46,8 @@ check "old alias gone from bashrc"    '! grep -q "gs=" $H/.bashrc'
 check "backup + manifest exist"       '[[ -s $H/.termfx-backup/latest/MANIFEST ]]'
 WANT=$(sed -n 's/^VERSION="\(.*\)"/\1/p' install.sh | head -n1)
 check "engine version = installer ($WANT)" '[[ $($H/.local/bin/termfx-engine version) == $WANT ]]'
+check "no hold setting left"          '! grep -q "^hold" $H/.config/termfx/config'
+check "no comment junk in pause list"  '! $H/.local/bin/termfx-engine height | grep -q "extra,commands"'
 check "engine doctor runs"            '$H/.local/bin/termfx-engine doctor >/dev/null 2>&1'
 check "art-info works"                '$H/.local/bin/termfx-engine art-info girl >/dev/null 2>&1'
 check "spinner has 2 different frames" '[[ $(sed -n "1,/---FRAME---/p" $H/.config/termfx/art/spinner.txt | md5sum) != $(sed -n "/---FRAME---/,\$p" $H/.config/termfx/art/spinner.txt | tail -n +2 | md5sum) ]]'

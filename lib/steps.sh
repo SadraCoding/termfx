@@ -80,8 +80,8 @@ art_wizard() {
   local names=() n i=0
   while IFS= read -r n; do names+=("$n"); done < <("$BIN_DIR/termfx-engine" list art)
   printf '\n  %sChoose your header art:%s\n' "$CB" "$C0"
-  for n in "${names[@]}"; do i=$((i+1)); printf '   %s%2d)%s %s\n' "$CM" "$i" "$C0" "$n"; done
-  printf '   %s p)%s paste my own ASCII art now\n   %s f)%s load from a file / URL\n   %s d)%s my distro logo (needs fastfetch)\n   %s r)%s random each time\n' "$CM" "$C0" "$CM" "$C0" "$CM" "$C0" "$CM" "$C0"
+  for n in "${names[@]}"; do i=$((i+1)); printf '   %s%3d)%s %s\n' "$CM" "$i" "$C0" "$n"; done
+  printf '   %s  p)%s paste my own ASCII art now\n   %s  f)%s load from a file / URL\n   %s  d)%s my distro logo (needs fastfetch)\n   %s  r)%s random each time\n' "$CM" "$C0" "$CM" "$C0" "$CM" "$C0" "$CM" "$C0"
   local c; c=$(ask "  choice [1]: " "1")
   case $c in
     p|P) printf '  %sPaste now, finish with Ctrl-D on an empty line:%s\n' "$CD" "$C0"
@@ -103,17 +103,19 @@ art_wizard() {
   esac
 
   if [[ -z $EFFECT ]]; then
-    local fx=()
-    local descs=()
-    while IFS= read -r n; do
-      fx+=("${n%% *}")
-      descs+=("${n#"${n%% *}"}"); descs[-1]=${descs[-1]## }
-    done < <("$BIN_DIR/termfx-engine" list effects)
+    local fx=() descs=() fxpal=() line
+    while IFS=$'\t' read -r n line c; do
+      fx+=("$n"); descs+=("$line"); fxpal+=("$c")
+    done < <("$BIN_DIR/termfx-engine" list effect-menu)
     ((${#fx[@]})) || fx=(aurora wave rainbow plasma fire matrix pulse static)
-    printf '\n  %s%s effects available%s (enter a number, type a name, or press Enter for aurora):\n' "$CB" "${#fx[@]}" "$C0"
-    local i
+    printf '\n  %s%s effects%s - pick a number or a name (Enter = aurora):\n' "$CB" "${#fx[@]}" "$C0"
+    local i ecols; ecols=$(_tw)
     for i in "${!fx[@]}"; do
-      printf '   %s%2d)%s %-13s %s%s%s\n' "$CM" "$((i+1))" "$C0" "${fx[i]}" "$CD" "${descs[i]}" "$C0"
+      if ((ecols >= 80)); then
+        printf '   %s%3d)%s %-14s %s%-36s palette: %s%s\n' "$CM" "$((i+1))" "$C0" "${fx[i]}" "$CD" "${descs[i]:-}" "${fxpal[i]:-auto}" "$C0"
+      else       # narrow terminal: keep each entry on one line so nothing wraps into the next row
+        printf '   %s%3d)%s %-14s %s%.*s%s\n' "$CM" "$((i+1))" "$C0" "${fx[i]}" "$CD" "$((ecols > 26 ? ecols - 26 : 0))" "${descs[i]:-}" "$C0"
+      fi
     done
     c=$(ask "  effect [1=aurora]: " "1")
     if [[ $c =~ ^[0-9]+$ ]] && ((c >= 1 && c <= ${#fx[@]})); then
@@ -130,26 +132,46 @@ art_wizard() {
 
   # palette selection
   if [[ -z $PALETTE ]]; then
-    local pals=()
-    while IFS= read -r n; do pals+=("$n"); done < <("$BIN_DIR/termfx-engine" list palettes)
+    local pals=() pstops=() phex=() n2
+    while IFS= read -r n; do
+      pals+=("${n%% *}")
+      n2=${n#* }; pstops+=("${n2%% *}"); phex+=("${n2#* }")
+    done < <("$BIN_DIR/termfx-engine" list palette-menu)
     if ((${#pals[@]})); then
-      printf '\n  %s%s palettes%s (or press Enter for auto = best per effect):\n' "$CB" "${#pals[@]}" "$C0"
-      local p i=0
-      # show first 20 + auto option
-      for p in "${pals[@]:0:20}"; do
-        i=$((i+1)); printf '   %s%2d)%s %s\n' "$CM" "$i" "$C0" "$p"
+      local pcols=${COLUMNS:-0}
+      ((pcols > 0)) || pcols=$(tput cols 2>/dev/null || echo 80)
+      printf '\n  %s%s palettes%s - pick a number or a name (Enter = auto = best for the effect):\n' "$CB" "${#pals[@]}" "$C0"
+      local p i h r g bl sw hx
+      for i in "${!pals[@]}"; do
+        sw=""; hx=""
+        for h in ${phex[i]}; do
+          hx+="#$h "
+          if [[ -n $C0 ]]; then
+            r=$((16#${h:0:2})); g=$((16#${h:2:2})); bl=$((16#${h:4:2}))
+            sw+=$(printf '\033[48;2;%d;%d;%dm  ' "$r" "$g" "$bl")      # colour swatch; the hex text keeps the normal colour so it stays readable on any background
+          fi
+        done
+        [[ -n $sw ]] && sw+=$C0
+        hx=${hx% }
+        if ((pcols >= 112)); then      # wide terminal: everything on one line
+          printf '   %s%3d)%s %-14s %s%d stops%s  %s%*s %s%s%s\n' "$CM" "$((i+1))" "$C0" "${pals[i]}" "$CD" "${pstops[i]}" "$C0" "$sw" "$(( (8 - ${pstops[i]}) * 2 ))" "" "$CD" "$hx" "$C0"
+        else                           # narrow terminal: hex values on their own line so nothing wraps
+          printf '   %s%3d)%s %-14s %s%d stops%s  %s\n' "$CM" "$((i+1))" "$C0" "${pals[i]}" "$CD" "${pstops[i]}" "$C0" "$sw"
+          printf '%s\n' "$hx" | fold -s -w "$((pcols > 16 ? pcols - 8 : 8))" | while IFS= read -r hl; do printf '        %s%s%s\n' "$CD" "${hl%"${hl##*[![:space:]]}"}" "$C0"; done
+        fi
       done
-      printf '   %s  …%s (%d more: termfx palette list)\n' "$CD" "$C0" "${#pals[@]}"
-      printf '   %s a)%s auto (recommended - matches the effect)\n' "$CM" "$C0"
-      c=$(ask "  palette [a=auto]: " "a")
+      printf '   %s  a)%s %-14s %sbest palette for the chosen effect (recommended)%s\n' "$CM" "$C0" "auto" "$CD" "$C0"
+      c=$(ask "  palette (number, name, or custom #hex,#hex,...) [a=auto]: " "a")
       if [[ $c == a || $c == A || -z $c ]]; then
         PALETTE=auto
       elif [[ $c =~ ^[0-9]+$ ]] && ((c >= 1 && c <= ${#pals[@]})); then
         PALETTE=${pals[c-1]}
+      elif [[ $c =~ ^#?[0-9a-fA-F]{6}(,#?[0-9a-fA-F]{6})+$ ]]; then
+        PALETTE=$c                                  # custom colours, e.g. #ff0080,#00e5ff,#7a00ff
       else
         local pfound=0
         for p in "${pals[@]}"; do [[ $p == "$c" ]] && { PALETTE=$c; pfound=1; break; }; done
-        ((pfound)) || PALETTE=auto
+        if ((!pfound)); then warn "unknown palette '$c' - using auto"; PALETTE=auto; fi
       fi
       ok "palette = $PALETTE"
     fi
@@ -160,13 +182,13 @@ art_wizard() {
     local fpresets=() fpdescs=()
     while IFS= read -r line; do
       fpresets+=("${line%% *}")
-      fpdescs+=("${line#* }")
+      fpdescs+=("$(printf '%s' "${line#* }" | sed 's/^[[:space:]]*//')")
     done < <(CONF_DIR="$CONF_DIR" python3 "$BIN_DIR/termfx-themes" --list fetch 2>/dev/null)
     if ((${#fpresets[@]})); then
       printf '\n  %s%s Fastfetch panel presets%s (Enter = classic):\n' "$CB" "${#fpresets[@]}" "$C0"
       local fi2
       for fi2 in "${!fpresets[@]}"; do
-        printf '   %s%2d)%s %-13s %s%s%s\n' "$CM" "$((fi2+1))" "$C0" "${fpresets[$fi2]}" "$CD" "${fpdescs[$fi2]}" "$C0"
+        printf '   %s%3d)%s %-14s %s%s%s\n' "$CM" "$((fi2+1))" "$C0" "${fpresets[$fi2]}" "$CD" "${fpdescs[$fi2]}" "$C0"
       done
       c=$(ask "  fetch preset [1=classic]: " "1")
       if [[ $c =~ ^[0-9]+$ ]] && ((c >= 1 && c <= ${#fpresets[@]})); then
@@ -193,10 +215,20 @@ starship_theme_wizard() {
   have_tty || return 0
   current=$(awk -F= '/^[[:space:]]*starship_theme[[:space:]]*=/ {split($2, v, "#"); gsub(/[[:space:]]/, "", v[1]); print v[1]}' "$CONF_DIR/config" 2>/dev/null | tail -n1)
   current=${current:-terminal-match}
-  printf '\n  %sStarship prompt themes%s (files are saved under %s/starship-themes/):\n' "$CB" "$C0" "$CONF_DIR"
-  CONF_DIR="$CONF_DIR" python3 "$BIN_DIR/termfx-themes" --list starship | sed 's/^/    /'
+  local snames=() sdescs=() n d i
+  while IFS= read -r n; do
+    snames+=("${n%% *}"); d=${n#* }; sdescs+=("${d#"${d%%[![:space:]]*}"}")
+  done < <(CONF_DIR="$CONF_DIR" python3 "$BIN_DIR/termfx-themes" --list starship)
+  printf '\n  %s%s Starship prompt themes%s - pick a number or a name:\n' "$CB" "${#snames[@]}" "$C0"
+  for i in "${!snames[@]}"; do
+    printf '   %s%3d)%s %-20s %s%s%s%s\n' "$CM" "$((i+1))" "$C0" "${snames[i]}" "$CD" "${sdescs[i]}" "$C0" "$([[ ${snames[i]} == "$current" ]] && printf ' (current)')"
+  done
   choice=$(ask "  theme [Enter keeps $current]: " "")
   [[ -z $choice ]] && { info "keeping Starship theme: $current"; return 0; }
+  if [[ $choice =~ ^[0-9]+$ ]]; then
+    if ((choice >= 1 && choice <= ${#snames[@]})); then choice=${snames[choice-1]}
+    else warn "choice out of range - keeping $current"; return 0; fi
+  fi
   "$BIN_DIR/termfx" starship theme "$choice"
 }
 
@@ -205,14 +237,17 @@ _tool_line() { # cmd label
   else printf '    %s·%s %-12s not installed (optional)\n' "$CD" "$C0" "$2"; fi
 }
 
+# one aligned line of the summary: command (coloured) + padded description column
+_cmd() { printf '    %s%-40s%s %s\n' "$CC" "$1" "$C0" "$2"; }
+
 finish_message() {
   cat <<EOF
 
 ${CG}${CB}  ✔ termfx $VERSION installed${C0}
 
   ${CB}Open a new terminal${C0} (or run ${CC}exec \$SHELL${C0}) to see the animated header.
-  Needs about ${CB}80×24${C0} or larger - below that the header hides itself (prompt still works).
-  If p10k or oh-my-posh remains active (--keep-old), keep only one prompt framework enabled.
+  It needs a window of about ${CB}80×24${C0} or more; below that the header hides itself.
+  If p10k or oh-my-posh is still active (--keep-old), keep only one prompt tool.
 
   ${CB}What's ready${C0}
 EOF
@@ -223,41 +258,54 @@ EOF
   { have bat || have batcat; } && printf '    %s✔%s %-12s ready\n' "$CG" "$C0" "bat" \
     || printf '    %s·%s %-12s not installed (optional)\n' "$CD" "$C0" "bat"
   _tool_line fzf       fzf
+  local n_pal; n_pal=$("$BIN_DIR/termfx-engine" list palettes 2>/dev/null | grep -c .)
   cat <<EOF
 
   ${CB}Features & commands${C0}
-    ${CC}termfx effect list${C0}                 list all animated effects
-    ${CC}termfx effect next${C0}               cycle through effects live
-    ${CC}termfx effect info NAME${C0}          details + recommended palette
-    ${CC}termfx palette list${C0}              66 colour palettes
-    ${CC}termfx palette show NAME${C0}         preview colours with gradient
-    ${CC}termfx palette next${C0}              cycle through palettes
-    ${CC}termfx preview effect=fire${C0}       full-screen preview (any key to exit)
-    ${CC}termfx theme list${C0}                 change shell/prompt colours
-    ${CC}termfx starship theme list${C0}        browse named prompt themes
-    ${CC}termfx starship theme cloud-ops${C0}    apply a Starship theme
-    ${CC}termfx art add mine${C0}               paste your own ASCII (any size)
-    ${CC}termfx info items${C0}                 manage the system info panel
-    ${CC}termfx info custom \"CMD\"${C0}          custom info panel command
-    ${CC}termfx randomize${C0}                  instant random look
-    ${CC}termfx profile save work${C0}         save/load config profiles
-    ${CC}termfx --help${C0}                     full feature list
+EOF
+  _cmd "termfx effect list"                 "list all animated effects"
+  _cmd "termfx effect next"                 "cycle through effects live"
+  _cmd "termfx effect info NAME"            "details + recommended palette"
+  _cmd "termfx palette list"                "${n_pal:-?} colour palettes"
+  _cmd "termfx palette show NAME"           "preview colours with gradient"
+  _cmd "termfx palette next"                "cycle through palettes"
+  _cmd "termfx preview effect=fire"         "full-screen preview (any key exits)"
+  _cmd "termfx theme list"                  "change shell/prompt colours"
+  _cmd "termfx starship theme list"         "browse named prompt themes"
+  _cmd "termfx starship theme cloud-ops"    "apply a Starship theme"
+  _cmd "termfx art add mine"                "paste your own ASCII art"
+  _cmd "termfx info items"                  "manage the system info panel"
+  _cmd "termfx info custom 'CMD'"           "custom info panel command"
+  _cmd "termfx randomize"                   "instant random look"
+  _cmd "termfx profile save work"           "save/load config profiles"
+  _cmd "termfx --help"                      "full feature list"
+  cat <<EOF
 
-  ${CB}Available effects${C0} (76 effects, plus the random selector):
+  ${CB}All effects${C0} (descriptions and recommended palettes):
 EOF
   "$BIN_DIR/termfx" effect list
   cat <<EOF
 
+  ${CB}All palettes${C0} (colour stop count and hex values):
+EOF
+  "$BIN_DIR/termfx-engine" list palette-details
+  local n_st n_ff
+  n_st=$(python3 "$BIN_DIR/termfx-themes" --list starship 2>/dev/null | grep -c .)
+  n_ff=$(python3 "$BIN_DIR/termfx-themes" --list fetch 2>/dev/null | grep -c .)
+  cat <<EOF
+
   ${CB}Quick tips${C0}
-    ${CC}termfx starship theme developer-forge${C0} named Starship theme (14 choices: termfx starship theme list)
-    ${CC}termfx starship set right_prompt true${C0} customize Starship controls
-    ${CC}termfx fastfetch gamer${C0}             switch info panel preset (11 styles: termfx fastfetch list)
-    ${CC}termfx glitch on${C0}                   enable random glitch distortions
-    ${CC}termfx info-colors neon${C0}            colour the info panel with any palette
-    ${CC}termfx set sparkle true${C0}           add sparkle effect to the header
-    ${CC}termfx set vignette true${C0}         cinematic edge darkening
-    ${CC}termfx rotate on 60${C0}              auto-rotate effects every 60s
-    ${CC}termfx align center${C0}              centre the header
+EOF
+  _cmd "termfx starship theme developer-forge" "one of ${n_st:-?} Starship themes"
+  _cmd "termfx starship set right_prompt true" "customize Starship controls"
+  _cmd "termfx fastfetch gamer"                "one of ${n_ff:-?} info panel presets"
+  _cmd "termfx glitch on"                      "random glitch distortions"
+  _cmd "termfx info-colors neon"               "colour the info panel"
+  _cmd "termfx set sparkle true"               "sparkle effect on the header"
+  _cmd "termfx set vignette true"              "cinematic edge darkening"
+  _cmd "termfx rotate on 60"                   "auto-rotate effects every 60s"
+  _cmd "termfx align center"                   "centre the header"
+  cat <<EOF
 
   Restore old setup:  ${CC}termfx restore${C0}
   Uninstall:          ${CC}termfx uninstall${C0}

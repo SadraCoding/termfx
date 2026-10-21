@@ -24,7 +24,7 @@ DEFAULTS = {
     "info_cmd": "", "info_gap": "4", "stars": "true", "glitch": "false",
     "sweep": "true", "intro": "true", "sparkle": "false", "vignette": "false",
     "intensity": "1.0", "frame_ms": "140", "min_cols": "80",
-    "min_rows": "24", "reserve": "10", "pause": "tui", "pause_cmds": "",
+    "min_rows": "24", "reserve": "10", "pause": "auto",
     "truecolor": "auto", "align": "left", "rotate": "false",
     "rotate_interval": "300", "notification": "false", "notify_after": "10",
     "info_colors": "auto", "fetch_preset": "classic",
@@ -185,11 +185,6 @@ EFFECT_PALETTE = {
     "ink": "ink", "barcode": "mono", "topography": "forest",
     "twinkle": "candy", "waveform": "synthwave",
 }
-PAUSE_CMDS = ("vim,nvim,vi,view,nano,micro,hx,helix,emacs,kak,less,more,most,man,htop,btop,top,"
-              "bpytop,btm,glances,tmux,screen,zellij,mc,ranger,yazi,nnn,lf,lazygit,lazydocker,k9s,"
-              "ssh,mosh,fzf,sk,watch,git,journalctl,systemctl,claude,ncdu,cmus,ncmpcpp,mpv,"
-              "nmtui,weechat,irssi,w3m,lynx,mutt,neomutt,cava,gdb,lldb,pager,bat,tig,vifm")
-
 FALLBACK_ART = ["  _                    __       ",
                 " | |_ ___ _ __ _ __ ___ / _|_  __  ",
                 " | __/ _ \\ '__| '_ ` _ \\ |_\\ \\/ /  ",

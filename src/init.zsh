@@ -42,25 +42,70 @@ if [[ $TFX_PROMPT != off ]] && (( $+commands[starship] )) && (( ! $+functions[p1
 fi
 
 # ---- animated header
-_termfx_cls() { local p h=0 par; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h == <-> ]] || h=0; print -n "\e[2J\e[$((h+1));1H"; }
+# Header held hidden after a big-output command: `clear` / Ctrl-L brings it back.
+_termfx_resume_header() {
+  local p h par i
+  [[ -n ${_TFX_HELD:-} ]] || return 0
+  _TFX_HELD=
+  [[ -e ${TERMFX_FLAG:-/nonexistent} ]] && command rm -f -- "$TERMFX_FLAG"
+  for ((i=0; i<60; i++)); do               # wait (max ~1.5s) until the engine has re-reserved its rows
+    read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
+    [[ ${h:-0} == <1-> ]] && return 0
+    sleep 0.025
+  done
+}
+_termfx_cls() { local p h=0 par; _termfx_resume_header; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h == <-> ]] || h=0; print -n "\e[2J\e[$((h+1));1H"; }
 clear() { if [[ -n ${TERMFX_FLAG:-} ]]; then _termfx_cls; else command clear "$@"; fi }
+_termfx_hide_header() {
+  local p h par i
+  [[ -n ${TERMFX_FLAG:-} && -r $TERMFX_FLAG.state ]] || return 0
+  read -r p h par < "$TERMFX_FLAG.state"
+  [[ ${h:-0} == <-> ]] && (( h > 0 )) || return 0
+  local hh=$h j
+  : >| "$TERMFX_FLAG"
+  for ((i=0; i<40; i++)); do
+    read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
+    if [[ ${h:-0} == 0 ]]; then            # engine is idle: erase the header rows once more so no frame can linger
+      print -n '\e7\e[r\e[1;1H'; for ((j=0; j<hh; j++)); do print -n '\e[2K'; ((j + 1 < hh)) && print -n '\e[1B'; done; print -n '\e8'
+      return 0
+    fi
+    sleep 0.025
+  done
+  h=$hh
+  # Fallback for an old or unresponsive engine: make room before starting output.
+  print -n '\e7\e[r\e[1;1H'
+  for ((i=0; i<${h:-0}; i++)); do
+    print -n '\e[2K'
+    ((i + 1 < h)) && print -n '\e[1B'
+  done
+  print -n '\e8\e[r'
+}
 _termfx_widget_cls() { _termfx_cls; zle reset-prompt }
 
+# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
+_termfx_screen_full() {
+  local pos r rows=${LINES:-0}
+  print -n '\e[6n' >/dev/tty 2>/dev/null || return 1
+  IFS= read -rs -t 0.3 -d R pos </dev/tty 2>/dev/null || return 1
+  r=${pos##*\[}; r=${r%;*}
+  [[ $r == <-> ]] || return 1
+  (( rows > 0 )) || rows=$(tput lines 2>/dev/null || echo 0)
+  (( rows > 0 && r >= rows ))
+}
+# The header is hidden while a command runs, so its output can use the whole screen (and scrollback).
 _termfx_preexec() {
   _TFX_CMD_START=$SECONDS
   [[ -n ${TERMFX_FLAG:-} ]] || return
-  case $_TFX_MODE in never) return ;; always) : >| "$TERMFX_FLAG"; return ;; esac
-  local -a w; w=(${(z)1})
-  while (( ${#w} )); do
-    case ${w[1]:t} in
-      sudo|doas|command|env|exec|nohup|time|noglob|builtin|nice|setsid|-*|*=*) shift w ;;
-      *) break ;;
-    esac
-  done
-  [[ -n ${w[1]:-} && $_TFX_CMDS == *",${w[1]:t},"* ]] && : >| "$TERMFX_FLAG"
+  [[ $_TFX_MODE == never ]] && return
+  case $1 in clear|clear\ *) return ;; esac
+  _termfx_hide_header
 }
 _termfx_precmd() {
-  [[ -e ${TERMFX_FLAG:-/nonexistent} ]] && command rm -f -- "$TERMFX_FLAG"
+  if [[ -n ${TERMFX_FLAG:-} && -z ${_TFX_HELD:-} ]]; then
+    if _termfx_screen_full; then                       # output reached the bottom: stay hidden until clear
+      _TFX_HELD=1; [[ -e $TERMFX_FLAG ]] || _termfx_hide_header
+    elif [[ -e $TERMFX_FLAG ]]; then command rm -f -- "$TERMFX_FLAG"; fi
+  fi
   # notification for long-running commands
   if [[ ${TFX_NOTIFY} == true && -n ${_TFX_CMD_START:-} ]] && (( SECONDS - _TFX_CMD_START >= TFX_NOTIFY_AFTER )); then
     local elapsed=$(( SECONDS - _TFX_CMD_START ))
@@ -107,7 +152,7 @@ _termfx_boot() {
     fi
     return 0
   fi
-  typeset -g _TFX_MODE=${f[4]:-tui} _TFX_CMDS=",${f[5]:-},"
+  typeset -g _TFX_MODE=${f[4]:-auto} _TFX_HELD=
   export TERMFX_FLAG="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/termfx-$UID-$$" TERMFX_ACTIVE=1
   command rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"
   printf '\e[2J\e[%d;%dr\e[%d;1H' $((h+1)) $rows $((h+1))

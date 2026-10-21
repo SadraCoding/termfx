@@ -8,10 +8,21 @@ else
 fi
 STEP_N=0; STEP_T=9
 step() { STEP_N=$((STEP_N + 1)); printf '\n%s[%d/%d]%s %s%s%s\n' "$CM" "$STEP_N" "$STEP_T" "$C0" "$CB" "$*" "$C0"; }
-info() { printf '  %s•%s %s\n' "$CC" "$C0" "$*"; }
-ok()   { printf '  %s✔%s %s\n' "$CG" "$C0" "$*"; }
-warn() { printf '  %s!%s %s\n' "$CY" "$C0" "$*" >&2; }
-err()  { printf '  %s✘%s %s\n' "$CR" "$C0" "$*" >&2; }
+# Long messages wrap at the terminal width (continuation lines indented) instead of breaking mid-word.
+_tw() { local c=${COLUMNS:-0}; ((c > 0)) || c=$(tput cols 2>/dev/null || echo 80); [[ $c =~ ^[0-9]+$ ]] || c=80; ((c >= 40)) || c=40; printf '%s' "$c"; }
+_msg() { # colour glyph text...
+  local col=$1 g=$2; shift 2
+  local w; w=$(( $(_tw) - 4 ))
+  local first=1 line
+  while IFS= read -r line; do
+    if ((first)); then printf '  %s%s%s %s\n' "$col" "$g" "$C0" "$line"; first=0
+    else printf '    %s\n' "$line"; fi
+  done < <(printf '%s\n' "$*" | fold -s -w "$w" 2>/dev/null || printf '%s\n' "$*")
+}
+info() { _msg "$CC" "•" "$*"; }
+ok()   { _msg "$CG" "✔" "$*"; }
+warn() { _msg "$CY" "!" "$*" >&2; }
+err()  { _msg "$CR" "✘" "$*" >&2; }
 die()  { err "$*"; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 have_tty() { { : </dev/tty; } 2>/dev/null; }
@@ -39,8 +50,8 @@ OPTIONS
   --art-url URL         download ASCII art from URL
   --art-name NAME       name for the imported art (default: custom)
   --paste               paste ASCII art interactively (finish with Ctrl-D)
-  --effect NAME         any effect (termfx effect list) — 57 effects: aurora fire spiral vortex dna tunnel … random
-  --palette NAME        palette name or "#hex,#hex,..." (66 palettes; default: auto)
+  --effect NAME         choose any effect (see the complete catalog after install or run termfx effect list)
+  --palette NAME        choose any palette or use "#hex,#hex,..." (complete catalogue after install)
   --fetch-preset NAME   fastfetch panel preset (classic compact minimal clean full gamer server developer aesthetic hybridfetch ultra; default: classic)
   --starship-theme NAME choose a named Starship theme (termfx starship theme list)
   --shell zsh|bash|both|auto   which shell(s) to integrate (default: auto)

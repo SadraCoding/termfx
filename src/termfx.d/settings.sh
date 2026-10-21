@@ -101,18 +101,18 @@ cmd_starship() {
           ssh_only) value=${value:-true} ;; duration_min) value=${value:-2000} ;;
           time_format) value=${value:-%H:%M} ;; fill_symbol) value=${value:-·} ;;
           git_symbol) value=${value:-} ;; git_conflicted) value=${value:-⚡} ;;
-          git_ahead) value=${value:-⇡\${count}} ;; git_behind) value=${value:-⇣\${count}} ;;
-          git_diverged) value=${value:-⇕⇡\${ahead_count}⇣\${behind_count}} ;;
-          git_untracked) value=${value:-?\${count}} ;; git_stashed) value=${value:-≡} ;;
-          git_modified) value=${value:-!\${count}} ;; git_staged) value=${value:-+\${count}} ;;
-          git_renamed) value=${value:-»} ;; git_deleted) value=${value:-✘\${count}} ;;
+          git_ahead) value=${value:-⇡\${count\}} ;; git_behind) value=${value:-⇣\${count\}} ;;
+          git_diverged) value=${value:-⇕⇡\${ahead_count\}⇣\${behind_count\}} ;;
+          git_untracked) value=${value:-?\${count\}} ;; git_stashed) value=${value:-≡} ;;
+          git_modified) value=${value:-!\${count\}} ;; git_staged) value=${value:-+\${count\}} ;;
+          git_renamed) value=${value:-»} ;; git_deleted) value=${value:-✘\${count\}} ;;
         esac
         printf '  %-24s %s\n' "$k" "$value"
       done
       local active_theme; active_theme=$(cfg_get starship_theme); say "  theme: ${active_theme:-terminal-match}"
       local mods; mods=$(cfg_get starship_modules)
       say "  modules: ${mods:-$STARSHIP_DEFAULT_MODULES}"
-      say "  themes: $(CONF_DIR="$CONF_DIR" python3 "$THEMES" --list starship 2>/dev/null | tr '\n' ' ')"
+      say "  themes: $(CONF_DIR="$CONF_DIR" python3 "$THEMES" --list starship 2>/dev/null | awk '{printf "%s%s", sep, $1; sep=" "}')"
       say "  presets: balanced minimal developer cloud server full"
       say "  module control: termfx starship module list|on NAME|off NAME"
       ;;

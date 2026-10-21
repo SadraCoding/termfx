@@ -12,7 +12,7 @@ ENGINE="$(command -v termfx-engine 2>/dev/null || echo "$HOME/.local/bin/termfx-
 PROFILE_DIR="$CONF_DIR/profiles"
 
 STARSHIP_KEYS="starship_theme starship_newline starship_right_prompt starship_follow_symlinks starship_scan_timeout starship_command_timeout starship_directory_length starship_truncate_to_repo starship_git_branch_length starship_git_remote starship_username_always starship_ssh_only starship_duration_min starship_time_format starship_fill_symbol starship_git_symbol starship_modules starship_git_conflicted starship_git_ahead starship_git_behind starship_git_diverged starship_git_untracked starship_git_stashed starship_git_modified starship_git_staged starship_git_renamed starship_git_deleted"
-KNOWN_KEYS="enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause pause_cmds ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after $STARSHIP_KEYS"
+KNOWN_KEYS="enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after $STARSHIP_KEYS"
 
 if [[ -t 1 ]]; then B=$'\e[1m'; D=$'\e[2m'; G=$'\e[38;5;114m'; R=$'\e[38;5;204m'; Y=$'\e[38;5;221m'; C=$'\e[38;5;117m'; Z=$'\e[0m'
 else B=""; D=""; G=""; R=""; Y=""; C=""; Z=""; fi
@@ -28,13 +28,13 @@ ${B}termfx${Z} - animated terminal header + modern shell look
 
 ${B}ART${Z}  (your own ASCII - any size, thousands of lines are fine)
   termfx art list                       list installed art
-  termfx art add NAME [-u]              paste art now (finish with Ctrl-D)   [-u = use it]
+  termfx art add NAME [-u]              paste art (Ctrl-D ends; -u = use it)
   termfx art add NAME FILE|URL [-u]     import a file or URL
   termfx art edit NAME                  open in \$EDITOR (best for huge art)
   termfx art use NAME|random            switch art (applies live)
   termfx art show NAME                  print it plainly
   termfx art rm NAME                    delete
-  termfx art image NAME FILE|URL [W]    image -> braille ASCII (needs chafa or jp2a)
+  termfx art image NAME FILE|URL [W]    image to ASCII (needs chafa or jp2a)
   termfx art text NAME "TEXT" [font]    big text banner (needs figlet or toilet)
   termfx art distro [NAME]              your distro's logo (needs fastfetch)
   termfx art info [NAME]                size / fitting details
@@ -43,27 +43,27 @@ ${B}ART${Z}  (your own ASCII - any size, thousands of lines are fine)
 ${B}HEADER${Z}  (the animated ASCII at the top — all available effects and palettes)
   termfx effect NAME|list|next|prev   set or cycle through effects
   termfx effect info NAME             show details about an effect
-  termfx palette NAME|list|next|prev  set or cycle through palettes (or "#hex,#hex")
-  termfx palette show NAME            render a palette preview (gradient + blocks)
-  termfx preview [key=value ...]     try things full-screen, e.g.  termfx preview effect=vortex
+  termfx palette NAME|list|next|prev  set/cycle palettes (or "#hex,#hex")
+  termfx palette show NAME            preview a palette (gradient + blocks)
+  termfx preview [key=value ...]     full-screen try-out: preview effect=vortex
   termfx on | off | reload           enable / disable / re-read config live
   termfx align left|center|right     header horizontal alignment
   termfx rotate on|off [SECS]        auto-rotate effects/palettes
-  termfx glitch on|off              toggle random glitch distortions (off by default)
-  Extra knobs:  termfx set sparkle true | vignette true | intensity 1.4 | speed 1.5
+  termfx glitch on|off              random glitch distortions (default off)
+  Extra knobs:  termfx set sparkle true | vignette true | intensity 1.4
   Available effects:
 $("$ENGINE" list effects | sed 's/^/    /')
 
 ${B}SHELL LOOK${Z}  (prompt + info panel + colours)
-  termfx theme list|NAME                catppuccin tokyonight dracula nord gruvbox rosepine onedark mono
-  termfx theme new NAME [BASE]          make your own theme (edit the JSON: 12 hex colours)
-  termfx fastfetch [list|PRESET]        choose a Fastfetch panel preset (11 presets)
-  termfx prompt list|STYLE              pills blocks sharp slant minimal plain | custom
+  termfx theme list|NAME                catppuccin tokyonight dracula nord ...
+  termfx theme new NAME [BASE]          make your own theme (12 hex colours)
+  termfx fastfetch [list|PRESET]        choose a Fastfetch panel preset
+  termfx prompt list|STYLE              pills blocks sharp slant minimal plain
   termfx info on|off|items|refresh     manage the info/specs panel
   termfx info custom "CMD"             set a custom command for info output
-  termfx info-colors PALETTE           colours for the info panel (auto|rainbow|palette-name|off)
+  termfx info-colors PALETTE           info colours (auto|rainbow|NAME|off)
   termfx info-style list|STYLE          boxed clean compact minimal
-  termfx info-rows user,distro,cpu,...  choose info lines  (termfx info-rows list | default)
+  termfx info-rows user,distro,cpu,...  choose info lines (list | default)
   termfx char "❯"   |  termfx lines 1|2  |  termfx clock on|off|"%H:%M:%S"
   termfx starship list                  show Starship controls
   termfx starship set right_prompt true  change one of 25+ Starship settings
@@ -89,8 +89,8 @@ ${B}EXTRAS${Z}
 ${B}CONFIG${Z}
   termfx set KEY VALUE | get KEY        any config key (see: termfx config)
   termfx status | config | doctor | version
-  termfx restore [DIR]                  put back the terminal setup you had before termfx
-  termfx uninstall                      remove termfx (keeps your art unless --purge)
+  termfx restore [DIR]                  restore your previous terminal setup
+  termfx uninstall                      remove termfx (--purge also removes art)
 EOF
 }
 
@@ -198,7 +198,9 @@ case ${1:-help} in
   preview)
     shift; sets=(); for kv in "$@"; do [[ $kv == *=* ]] && sets+=(--set "$kv"); done
     "$ENGINE" ${sets[@]+"${sets[@]}"} preview 20 ;;
-  config) ${VISUAL:-${EDITOR:-nano}} "$CONF" ;;
+  config) ed=${VISUAL:-${EDITOR:-}}
+    if [[ -z $ed ]]; then for ed in nano vim vi; do command -v "$ed" >/dev/null 2>&1 && break; ed=; done; fi
+    if [[ -n $ed ]]; then $ed "$CONF"; else die "no editor found - set \$EDITOR or edit $CONF directly"; fi ;;
   status) cmd_status ;;
   doctor) "$ENGINE" doctor ;;
   uninstall) if [[ -x $DATA_DIR/install.sh ]]; then exec "$DATA_DIR/install.sh" uninstall "${@:2}"; else die "installer copy not found; re-download install.sh and run: ./install.sh uninstall"; fi ;;
@@ -321,7 +323,7 @@ _termfx_completions() {
   elif [[ ${COMP_WORDS[1]} == "fastfetch" ]]; then
     COMPREPLY=($(compgen -W "list $($TFX_THM --list fetch 2>/dev/null | awk '{print $1}')" -- "$cur"))
   elif [[ ${COMP_WORDS[1]} == "set" ]]; then
-    COMPREPLY=($(compgen -W "enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause pause_cmds ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after starship_newline starship_right_prompt starship_follow_symlinks starship_scan_timeout starship_command_timeout starship_directory_length starship_truncate_to_repo starship_git_branch_length starship_git_remote starship_username_always starship_ssh_only starship_duration_min starship_time_format starship_fill_symbol starship_git_symbol starship_modules starship_git_conflicted starship_git_ahead starship_git_behind starship_git_diverged starship_git_untracked starship_git_stashed starship_git_modified starship_git_staged starship_git_renamed starship_git_deleted" -- "$cur"))
+    COMPREPLY=($(compgen -W "enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after starship_newline starship_right_prompt starship_follow_symlinks starship_scan_timeout starship_command_timeout starship_directory_length starship_truncate_to_repo starship_git_branch_length starship_git_remote starship_username_always starship_ssh_only starship_duration_min starship_time_format starship_fill_symbol starship_git_symbol starship_modules starship_git_conflicted starship_git_ahead starship_git_behind starship_git_diverged starship_git_untracked starship_git_stashed starship_git_modified starship_git_staged starship_git_renamed starship_git_deleted" -- "$cur"))
   fi
 }
 complete -F _termfx_completions termfx

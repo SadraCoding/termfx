@@ -3,8 +3,8 @@
 
 enabled   = true
 art       = girl       # name in ~/.config/termfx/art/NAME.txt, a path, or "random"
-effect    = aurora       # see: termfx effect list   (57 effects, or "random")
-palette   = auto         # auto | see: termfx palette list (66 palettes) | "#hex,#hex,#hex"
+effect    = aurora       # see: termfx effect list   (all effects, or "random")
+palette   = auto         # auto | see: termfx palette list (all palettes) | "#hex,#hex,#hex"
 speed     = 1.0          # animation speed multiplier
 fps       = 20           # 2..60 (lower = less CPU)
 intensity = 1.0          # brightness 0.3 .. 2.5
@@ -39,8 +39,7 @@ vignette   = false       # darken edges for a soft focus look
 frame_ms   = 140         # speed of multi-frame art (separate frames with ---FRAME---)
 
 # --- behaviour & extras
-pause      = tui         # tui = pause for vim/htop/ssh/... | always | never
-pause_cmds =             # extra commands that should pause it, e.g. "mycli,foo"
+pause      = auto        # auto = hide the header while a command runs (and until clear if it fills the screen) | never
 align      = left        # left | center | right  (header horizontal position)
 rotate     = false       # true = auto-rotate effects/palettes on a timer
 rotate_interval = 300    # seconds between rotations (when rotate = true)
