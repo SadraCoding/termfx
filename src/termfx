@@ -1,0 +1,373 @@
+#!/usr/bin/env bash
+# termfx - control the animated terminal header
+set -uo pipefail
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/termfx"
+ART_DIR="$CONF_DIR/art"
+CONF="$CONF_DIR/config"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/termfx"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/termfx"
+THEMES="$(command -v termfx-themes 2>/dev/null || echo "$HOME/.local/bin/termfx-themes")"
+ENGINE="$(command -v termfx-engine 2>/dev/null || echo "$HOME/.local/bin/termfx-engine")"
+
+PROFILE_DIR="$CONF_DIR/profiles"
+
+STARSHIP_KEYS="starship_theme starship_newline starship_right_prompt starship_follow_symlinks starship_scan_timeout starship_command_timeout starship_directory_length starship_truncate_to_repo starship_git_branch_length starship_git_remote starship_username_always starship_ssh_only starship_duration_min starship_time_format starship_fill_symbol starship_git_symbol starship_modules starship_git_conflicted starship_git_ahead starship_git_behind starship_git_diverged starship_git_untracked starship_git_stashed starship_git_modified starship_git_staged starship_git_renamed starship_git_deleted"
+KNOWN_KEYS="enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause pause_cmds ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after $STARSHIP_KEYS"
+
+if [[ -t 1 ]]; then B=$'\e[1m'; D=$'\e[2m'; G=$'\e[38;5;114m'; R=$'\e[38;5;204m'; Y=$'\e[38;5;221m'; C=$'\e[38;5;117m'; Z=$'\e[0m'
+else B=""; D=""; G=""; R=""; Y=""; C=""; Z=""; fi
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '%s✔%s %s\n' "$G" "$Z" "$*"; }
+warn() { printf '%s!%s %s\n' "$Y" "$Z" "$*" >&2; }
+die()  { printf '%s✘%s %s\n' "$R" "$Z" "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+cat <<EOF
+${B}termfx${Z} - animated terminal header + modern shell look
+
+${B}ART${Z}  (your own ASCII - any size, thousands of lines are fine)
+  termfx art list                       list installed art
+  termfx art add NAME [-u]              paste art now (finish with Ctrl-D)   [-u = use it]
+  termfx art add NAME FILE|URL [-u]     import a file or URL
+  termfx art edit NAME                  open in \$EDITOR (best for huge art)
+  termfx art use NAME|random            switch art (applies live)
+  termfx art show NAME                  print it plainly
+  termfx art rm NAME                    delete
+  termfx art image NAME FILE|URL [W]    image -> braille ASCII (needs chafa or jp2a)
+  termfx art text NAME "TEXT" [font]    big text banner (needs figlet or toilet)
+  termfx art distro [NAME]              your distro's logo (needs fastfetch)
+  termfx art info [NAME]                size / fitting details
+  Multi-frame animation: put a line  ---FRAME---  between frames.
+
+${B}HEADER${Z}  (the animated ASCII at the top — 57 effects, 66 palettes)
+  termfx effect NAME|list|next|prev   set or cycle through effects
+  termfx effect info NAME             show details about an effect
+  termfx palette NAME|list|next|prev  set or cycle through palettes (or "#hex,#hex")
+  termfx palette show NAME            render a palette preview (gradient + blocks)
+  termfx preview [key=value ...]     try things full-screen, e.g.  termfx preview effect=vortex
+  termfx on | off | reload           enable / disable / re-read config live
+  termfx align left|center|right     header horizontal alignment
+  termfx rotate on|off [SECS]        auto-rotate effects/palettes
+  termfx glitch on|off              toggle random glitch distortions (off by default)
+  Extra knobs:  termfx set sparkle true | vignette true | intensity 1.4 | speed 1.5
+
+${B}SHELL LOOK${Z}  (prompt + info panel + colours)
+  termfx theme list|NAME                catppuccin tokyonight dracula nord gruvbox rosepine onedark mono
+  termfx theme new NAME [BASE]          make your own theme (edit the JSON: 12 hex colours)
+  termfx fastfetch [list|PRESET]        choose a Fastfetch panel preset (11 presets)
+  termfx prompt list|STYLE              pills blocks sharp slant minimal plain | custom
+  termfx info on|off|items|refresh     manage the info/specs panel
+  termfx info custom "CMD"             set a custom command for info output
+  termfx info-colors PALETTE           colours for the info panel (auto|rainbow|palette-name|off)
+  termfx info-style list|STYLE          boxed clean compact minimal
+  termfx info-rows user,distro,cpu,...  choose info lines  (termfx info-rows list | default)
+  termfx char "❯"   |  termfx lines 1|2  |  termfx clock on|off|"%H:%M:%S"
+  termfx starship list                  show Starship controls
+  termfx starship set right_prompt true  change one of 25+ Starship settings
+  termfx starship module on battery     enable optional Starship modules
+  termfx starship preset developer      choose a module collection
+  termfx starship theme list|NAME       choose a named Starship theme
+  termfx look                           show current look
+
+${B}PROFILES & SHARING${Z}
+  termfx profile save NAME              save current config as a named profile
+  termfx profile load NAME              apply a saved profile
+  termfx profile list                   list saved profiles
+  termfx profile rm NAME                delete a profile
+  termfx export [FILE]                  export config to JSON (stdout or FILE)
+  termfx import FILE                    import config from a JSON file
+  termfx randomize                      instant random look (effect+palette+art)
+
+${B}EXTRAS${Z}
+  termfx notify on|off [SECS]           desktop notification after long commands
+  termfx stats                          session stats (uptime, commands run)
+  termfx completion bash|zsh            print shell completion script
+
+${B}CONFIG${Z}
+  termfx set KEY VALUE | get KEY        any config key (see: termfx config)
+  termfx status | config | doctor | version
+  termfx restore [DIR]                  put back the terminal setup you had before termfx
+  termfx uninstall                      remove termfx (keeps your art unless --purge)
+EOF
+}
+
+CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/termfx.d"
+for _tfx_module in "$CLI_DIR"/*.sh; do . "$_tfx_module"; done
+unset _tfx_module
+
+case ${1:-help} in
+  art) shift; cmd_art "$@" ;;
+  effect)
+    shift; case ${1:-list} in
+      list) "$ENGINE" list effects; say "${D}tip: termfx preview effect=NAME   or   termfx effect random${Z}" ;;
+      next|prev)
+        all_fx=$("$ENGINE" list effects | awk '{print $1}')
+        cur=$(cfg_get effect); [[ -z $cur ]] && cur=aurora
+        idx=$(echo "$all_fx" | grep -nx -- "$cur" 2>/dev/null || echo "1")
+        total=$(echo "$all_fx" | wc -l)
+        if [[ ${1:-next} == next ]]; then idx=$(( (idx % total) + 1 )); else idx=$(( (idx - 2 + total) % total + 1 )); fi
+        new_fx=$(echo "$all_fx" | sed -n "${idx}p")
+        cfg_set effect "$new_fx"; ok "effect = $new_fx  [$idx/$total]"; regen ;;
+      info) n=${2:-}; [[ -n $n ]] || die "usage: termfx effect info NAME"; "$ENGINE" effect-info "$n" ;;
+      *) fx_all=$("$ENGINE" list effects | awk '{print $1}')
+         grep -qx -- "$1" <<<"$fx_all" || die "unknown effect '$1' (termfx effect list)"
+         cfg_set effect "$1"; ok "effect = $1"; regen ;; esac ;;
+  palette)
+    shift; case ${1:-list} in
+      list) "$ENGINE" list palettes; say "${D}auto = best for the effect; or custom: \"#hex,#hex,...\"${Z}" ;;
+      next|prev)
+        all_pal=$("$ENGINE" list palettes)
+        cur=$(cfg_get palette); [[ -z $cur || $cur == auto ]] && cur=$("$ENGINE" list palettes | head -1)
+        idx=$(echo "$all_pal" | grep -nx -- "$cur" 2>/dev/null || echo "1")
+        total=$(echo "$all_pal" | wc -l)
+        if [[ ${1:-next} == next ]]; then idx=$(( (idx % total) + 1 )); else idx=$(( (idx - 2 + total) % total + 1 )); fi
+        new_pal=$(echo "$all_pal" | sed -n "${idx}p")
+        cfg_set palette "$new_pal"; ok "palette = $new_pal  [$idx/$total]"; regen ;;
+      show)
+        n=${2:-}; [[ -n $n ]] || die "usage: termfx palette show NAME"; "$ENGINE" palette-show "$n" ;;
+      *) valid_palette "$1"; cfg_set palette "$1"; ok "palette = $1"; regen ;; esac ;;
+  theme)
+    shift; case ${1:-list} in
+      new) n=${2:?usage: termfx theme new NAME [BASE]}; valid_name "$n"; mkdir -p "$CONF_DIR/themes"
+        f="$CONF_DIR/themes/$n.json"; [[ -e $f ]] && die "$f exists"
+        theme_list=$("$THEMES" --list themes); grep -qx "${3:-catppuccin}" <<<"$theme_list" || die "unknown base"
+        python3 "$THEMES" --dump "${3:-catppuccin}" > "$f.tmp" && mv "$f.tmp" "$f" || { rm -f "$f.tmp"; die "failed"; }
+        ok "created $f - edit the colours, then: termfx theme $n"; ;;
+      edit) n=${2:?name}; ${VISUAL:-${EDITOR:-nano}} "$CONF_DIR/themes/$n.json"; regen ;;
+      *) choose theme "${1:-list}" "$THEMES" --list themes
+         if [[ ${1:-list} != list ]]; then
+           t=$(cfg_get theme); pl=$("$ENGINE" list palettes)
+           if grep -qx -- "$t" <<<"$pl"; then
+             cfg_set palette "$t"; ok "header palette matched theme '$t'"; reload
+           else
+             warn "theme '$t' has no matching header palette - prompt colours updated; try: termfx palette list"
+           fi
+         fi ;;
+    esac ;;
+  prompt)
+    shift
+    if [[ ${1:-} == custom ]]; then
+      cfg_set prompt_style custom; cfg_set starship_theme terminal-match
+      ok "prompt_style = custom (edit $CONF_DIR/starship.toml)"; regen
+    else choose prompt_style "${1:-list}" "$THEMES" --list prompts; fi ;;
+  starship)   shift; cmd_starship "$@" ;;
+  fastfetch)  shift; cmd_fastfetch "${1:-}" ;;
+  info)
+    shift; case ${1:-status} in
+      on) cfg_set info auto; ok "info panel enabled (auto)"; reload ;;
+      off) cfg_set info off; ok "info panel disabled"; reload ;;
+      refresh) rm -f "$CACHE_DIR/info.json" 2>/dev/null; ok "info cache cleared, will refresh"; reload ;;
+      items|list) "$ENGINE" list info-items ;;
+      custom) shift; [[ $# -ge 1 ]] || die "usage: termfx info custom \"COMMAND\""
+        cfg_set info_cmd "$*"; cfg_set info auto; ok "info_cmd = $*"; reload ;;
+      status)
+        mode=$(cfg_get info); cmd=$(cfg_get info_cmd); gap=$(cfg_get info_gap)
+        say "  ${B}mode${Z} : $mode"
+        say "  ${B}cmd${Z}  : ${cmd:-(none, using auto/builtin)}"
+        say "  ${B}gap${Z}  : $gap columns"
+        say "  ${B}style${Z}: $(cfg_get info_style)"
+        rows_val=$(cfg_get info_rows)
+        say "  ${B}rows${Z} : ${rows_val:-(default)}" ;;
+      *) die "usage: termfx info on|off|refresh|items|custom|status" ;; esac ;;
+  info-style) shift; choose info_style "${1:-list}" "$THEMES" --list infos ;;
+  info-colors)
+    shift; case ${1:-list} in
+      list) "$ENGINE" list palettes; say "${D}current: $(cfg_get info_colors)  (auto = match header palette, rainbow = pastel, off = no colours)${Z}" ;;
+      auto|rainbow|off) cfg_set info_colors "$1"; ok "info_colors = $1"; regen ;;
+      *) valid_palette "$1"; cfg_set info_colors "$1"; ok "info_colors = $1"; regen ;; esac ;;
+  info-rows)  shift; case ${1:-list} in
+      list) say "available: $("$THEMES" --list rows)"; say "${D}current: $(cfg_get info_rows)${Z}" ;;
+      default) cfg_set info_rows ""; ok "default rows"; regen ;;
+      *) cfg_set info_rows "$*"; ok "info_rows = $*"; regen ;; esac ;;
+  char)  shift; cfg_set prompt_char "${1:?usage: termfx char \"❯\"}"; ok "prompt_char = $1"; regen ;;
+  lines) shift; [[ ${1:-} == 1 || ${1:-} == 2 ]] || die "usage: termfx lines 1|2"; cfg_set prompt_lines "$1"; ok "prompt_lines = $1"; regen ;;
+  clock) shift; case ${1:-} in on) cfg_set clock true ;; off) cfg_set clock false ;; "") die 'usage: termfx clock on|off|"%H:%M:%S"' ;; *) cfg_set clock true; cfg_set clock_format "$1" ;; esac; ok "clock updated"; regen ;;
+  look) for k in theme prompt_style prompt_char prompt_lines clock clock_format info_style info_rows; do printf '  %-13s %s\n' "$k" "$(cfg_get $k)"; done ;;
+  set)
+    shift; [[ $# -ge 2 ]] || die "usage: termfx set KEY VALUE"
+    k=$1; shift
+    grep -qw -- "$k" <<<"$KNOWN_KEYS" || die "unknown key '$k' (edit freely with: termfx config)"
+    cfg_set "$k" "$*"; ok "$k = $*"; reload ;;
+  get)  shift; cfg_get "${1:?key}" ;;
+  on)   cfg_set enabled true;  ok "enabled"; reload ;;
+  off)  cfg_set enabled false; ok "disabled (new terminals; or: termfx reload)"; reload ;;
+  reload) reload ;;
+  preview)
+    shift; sets=(); for kv in "$@"; do [[ $kv == *=* ]] && sets+=(--set "$kv"); done
+    "$ENGINE" ${sets[@]+"${sets[@]}"} preview 20 ;;
+  config) ${VISUAL:-${EDITOR:-nano}} "$CONF" ;;
+  status) cmd_status ;;
+  doctor) "$ENGINE" doctor ;;
+  uninstall) if [[ -x $DATA_DIR/install.sh ]]; then exec "$DATA_DIR/install.sh" uninstall "${@:2}"; else die "installer copy not found; re-download install.sh and run: ./install.sh uninstall"; fi ;;
+  restore) if [[ -x $DATA_DIR/install.sh ]]; then exec "$DATA_DIR/install.sh" restore "${@:2}"; else die "installer copy not found; re-download install.sh and run: ./install.sh restore"; fi ;;
+  align) shift; case ${1:-} in left|center|right) cfg_set align "$1"; ok "align = $1"; reload ;; *) die "usage: termfx align left|center|right" ;; esac ;;
+  glitch) shift; case ${1:-} in
+    on|true) cfg_set glitch true; ok "glitch = on (random distortions)"; reload ;;
+    off|false) cfg_set glitch false; ok "glitch = off"; reload ;;
+    *) die "usage: termfx glitch on|off" ;; esac ;;
+  rotate) shift; case ${1:-} in
+    on) cfg_set rotate true; [[ -n ${2:-} ]] && cfg_set rotate_interval "$2"; ok "rotate = on (${2:-300}s)"; reload ;;
+    off) cfg_set rotate false; ok "rotate = off"; reload ;;
+    *) die "usage: termfx rotate on|off [SECS]" ;; esac ;;
+  notify) shift; case ${1:-} in
+    on) cfg_set notification true; [[ -n ${2:-} ]] && cfg_set notify_after "$2"; ok "notification = on (${2:-10}s threshold)"; reload ;;
+    off) cfg_set notification false; ok "notification = off"; reload ;;
+    *) die "usage: termfx notify on|off [SECS]" ;; esac ;;
+  profile)
+    shift; mkdir -p "$PROFILE_DIR"
+    case ${1:-list} in
+      save) n=${2:?usage: termfx profile save NAME}; valid_name "$n"
+        cp -- "$CONF" "$PROFILE_DIR/$n.conf"; ok "profile '$n' saved" ;;
+      load) n=${2:?usage: termfx profile load NAME}; valid_name "$n"
+        [[ -f $PROFILE_DIR/$n.conf ]] || die "profile '$n' not found (termfx profile list)"
+        cp -- "$PROFILE_DIR/$n.conf" "$CONF"; ok "profile '$n' loaded"; regen ;;
+      list)
+        shopt -s nullglob; found=0
+        for f in "$PROFILE_DIR"/*.conf; do found=1; printf '  %s %s\n' "${G}●${Z}" "${f##*/}"; done
+        shopt -u nullglob
+        ((found)) || say "  ${D}(no profiles yet - save one with: termfx profile save NAME)${Z}" ;;
+      rm|remove|delete) n=${2:?name}; valid_name "$n"
+        [[ -f $PROFILE_DIR/$n.conf ]] || die "not found"; rm -f -- "$PROFILE_DIR/$n.conf"; ok "profile '$n' removed" ;;
+      *) die "usage: termfx profile save|load|list|rm NAME" ;; esac ;;
+  export)
+    shift; dest=${1:-}
+    json="{}"
+    for k in $KNOWN_KEYS; do
+      v=$(cfg_get "$k")
+      json=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); d[sys.argv[2]]=sys.argv[3]; print(json.dumps(d))" "$json" "$k" "$v")
+    done
+    if [[ -n $dest ]]; then printf '%s\n' "$json" | python3 -m json.tool > "$dest"; ok "exported to $dest"
+    else printf '%s\n' "$json" | python3 -m json.tool; fi ;;
+  import)
+    shift; src=${1:?usage: termfx import FILE}
+    [[ -f $src ]] || die "file not found: $src"
+    python3 -c '
+import json,sys,os
+d=json.load(open(sys.argv[1]))
+conf=sys.argv[2]
+lines=[]
+try:
+    for line in open(conf):
+        k=line.split("=",1)[0].strip() if "=" in line else ""
+        if k not in d: lines.append(line)
+except OSError: pass
+for k,v in d.items():
+    if "#" in str(v): lines.append("%s = \"%s\"\n" % (k,v))
+    else: lines.append("%s = %s\n" % (k,v))
+open(conf,"w").writelines(lines)
+' "$src" "$CONF" || die "import failed (invalid JSON?)"
+    ok "config imported from $src"; regen ;;
+  randomize)
+    mapfile -t all_fx < <("$ENGINE" list effects 2>/dev/null | awk '{print $1}' | grep -v random)
+    mapfile -t all_pal < <("$ENGINE" list palettes 2>/dev/null)
+    rfx=${all_fx[RANDOM % ${#all_fx[@]}]:-aurora}
+    rpal=${all_pal[RANDOM % ${#all_pal[@]}]:-auto}
+    arts=(); shopt -s nullglob; for f in "$ART_DIR"/*.txt; do a=${f##*/}; arts+=("${a%.txt}"); done; shopt -u nullglob
+    ((${#arts[@]})) && cfg_set art "${arts[$((RANDOM % ${#arts[@]}))]}"
+    cfg_set effect "$rfx"; cfg_set palette "$rpal"
+    cfg_set intensity "$(awk "BEGIN{srand($RANDOM);printf \"%.1f\",0.6+rand()*1.2}")"
+    cfg_set speed "$(awk "BEGIN{srand($RANDOM);printf \"%.1f\",0.5+rand()*2.0}")"
+    ((RANDOM % 3 == 0)) && cfg_set sparkle true || cfg_set sparkle false
+    ((RANDOM % 3 == 0)) && cfg_set vignette true || cfg_set vignette false
+    ok "randomized! effect=$rfx palette=$rpal  (termfx preview to see, or termfx reload)"
+    reload ;;
+  stats)
+    say "${B}termfx session stats${Z}"
+    printf '  %-14s %s\n' "version" "$("$ENGINE" version 2>/dev/null)"
+    printf '  %-14s %s\n' "config" "$CONF"
+    printf '  %-14s %s\n' "art files" "$(find "$ART_DIR" -name '*.txt' 2>/dev/null | wc -l)"
+    printf '  %-14s %s\n' "cache size" "$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1 || echo '0')"
+    printf '  %-14s %s\n' "profiles" "$(find "$PROFILE_DIR" -name '*.conf' 2>/dev/null | wc -l)"
+    printf '  %-14s %s\n' "terminal" "$(tput cols 2>/dev/null)x$(tput lines 2>/dev/null)"
+    [[ -n ${TERMFX_FLAG:-} && -r ${TERMFX_FLAG}.state ]] && printf '  %-14s %s\n' "header" "running" \
+      || printf '  %-14s %s\n' "header" "not in this terminal"
+    say "${D}  uptime: $(uptime -p 2>/dev/null || uptime)${Z}" ;;
+  completion)
+    shift; case ${1:-} in
+      bash)
+        cat <<'COMPEOF'
+_termfx_completions() {
+    local cur words=(art effect palette theme prompt starship info info-style info-colors info-rows fastfetch char lines clock on off reload preview config status doctor uninstall restore version help set get look profile export import randomize notify align rotate glitch stats completion)
+  local TFX_ENG; TFX_ENG=$(command -v termfx-engine 2>/dev/null || echo "$HOME/.local/bin/termfx-engine")
+  local TFX_THM; TFX_THM=$(command -v termfx-themes 2>/dev/null || echo "$HOME/.local/bin/termfx-themes")
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  if [[ $COMP_CWORD == 1 ]]; then
+    COMPREPLY=($(compgen -W "${words[*]}" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "effect" ]]; then
+    COMPREPLY=($(compgen -W "list next prev info $($TFX_ENG list effects 2>/dev/null | awk '{print $1}')" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "palette" ]]; then
+    COMPREPLY=($(compgen -W "list next prev show auto $($TFX_ENG list palettes 2>/dev/null)" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "theme" ]]; then
+    COMPREPLY=($(compgen -W "$($TFX_THM --list themes 2>/dev/null) list new edit" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "starship" && ${COMP_WORDS[2]} == "module" ]]; then
+    if [[ ${COMP_WORDS[3]} == "on" || ${COMP_WORDS[3]} == "off" || ${COMP_WORDS[3]} == "enable" || ${COMP_WORDS[3]} == "disable" ]]; then
+      COMPREPLY=($(compgen -W "$(termfx starship module list 2>/dev/null | awk '{print $2}')" -- "$cur"))
+    else COMPREPLY=($(compgen -W "list on off enable disable" -- "$cur")); fi
+  elif [[ ${COMP_WORDS[1]} == "starship" && ${COMP_WORDS[2]} == "theme" ]]; then
+    COMPREPLY=($(compgen -W "list $(termfx-themes --list starship 2>/dev/null | awk '{print $1}')" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "starship" && ${COMP_WORDS[2]} == "preset" ]]; then
+    COMPREPLY=($(compgen -W "list balanced minimal developer cloud server full" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "starship" && ${COMP_WORDS[2]} == "set" ]]; then
+    COMPREPLY=($(compgen -W "theme newline right_prompt follow_symlinks scan_timeout command_timeout directory_length truncate_to_repo git_branch_length git_remote username_always ssh_only duration_min time_format fill_symbol git_symbol modules git_conflicted git_ahead git_behind git_diverged git_untracked git_stashed git_modified git_staged git_renamed git_deleted" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "starship" ]]; then
+    COMPREPLY=($(compgen -W "list show preset set module" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "art" ]]; then
+    COMPREPLY=($(compgen -W "list add edit use show rm image text distro info" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "info" ]]; then
+    COMPREPLY=($(compgen -W "on off refresh items custom status list" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "fastfetch" ]]; then
+    COMPREPLY=($(compgen -W "list $($TFX_THM --list fetch 2>/dev/null | awk '{print $1}')" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == "set" ]]; then
+    COMPREPLY=($(compgen -W "enabled art effect palette speed fps intensity max_height max_width fit crop info info_cmd info_config info_gap info_rows info_colors info_style fetch_preset min_cols min_rows reserve intro stars sparkle glitch sweep vignette frame_ms pause pause_cmds ui prompt icons theme prompt_style prompt_char prompt_lines clock clock_format truecolor align rotate rotate_interval notification notify_after starship_newline starship_right_prompt starship_follow_symlinks starship_scan_timeout starship_command_timeout starship_directory_length starship_truncate_to_repo starship_git_branch_length starship_git_remote starship_username_always starship_ssh_only starship_duration_min starship_time_format starship_fill_symbol starship_git_symbol starship_modules starship_git_conflicted starship_git_ahead starship_git_behind starship_git_diverged starship_git_untracked starship_git_stashed starship_git_modified starship_git_staged starship_git_renamed starship_git_deleted" -- "$cur"))
+  fi
+}
+complete -F _termfx_completions termfx
+COMPEOF
+        ;;
+      zsh)
+        cat <<'COMPEOF'
+#compdef termfx
+_termfx() {
+  local -a commands effects palettes themes
+  commands=(art effect palette theme prompt starship info info-style info-colors info-rows fastfetch char lines clock on off reload preview config status doctor set get look profile export import randomize notify align rotate glitch stats completion uninstall restore version help)
+  if (( CURRENT == 2 )); then
+    _describe 'termfx command' commands
+  elif [[ $words[2] == "effect" ]]; then
+    _values 'effects' list next prev info $(termfx-engine list effects 2>/dev/null | awk '{print $1}')
+  elif [[ $words[2] == "palette" ]]; then
+    _values 'palettes' list next prev show auto $(termfx-engine list palettes 2>/dev/null)
+  elif [[ $words[2] == "info" ]]; then
+    _values 'info sub' on off refresh items custom status list
+  elif [[ $words[2] == "fastfetch" ]]; then
+    _values 'Fastfetch preset' list $(termfx-themes --list fetch 2>/dev/null | awk '{print $1}')
+  elif [[ $words[2] == "theme" ]]; then
+    _values 'themes' $(termfx-themes --list themes 2>/dev/null) list new edit
+  elif [[ $words[2] == "starship" ]]; then
+    if [[ $words[3] == "theme" ]]; then
+      _values 'Starship theme' list $(termfx-themes --list starship 2>/dev/null | awk '{print $1}')
+    elif [[ $words[3] == "module" ]]; then
+      if [[ $words[4] == "on" || $words[4] == "off" || $words[4] == "enable" || $words[4] == "disable" ]]; then
+        _values 'Starship module' $(termfx starship module list 2>/dev/null | awk '{print $2}')
+      else
+        _values 'module action' list on off enable disable
+      fi
+    elif [[ $words[3] == "preset" ]]; then
+      _values 'Starship preset' list balanced minimal developer cloud server full
+    elif [[ $words[3] == "set" ]]; then
+      _values 'Starship option' theme newline right_prompt follow_symlinks scan_timeout command_timeout directory_length truncate_to_repo git_branch_length git_remote username_always ssh_only duration_min time_format fill_symbol git_symbol modules git_conflicted git_ahead git_behind git_diverged git_untracked git_stashed git_modified git_staged git_renamed git_deleted
+    else
+      _values 'Starship command' list show preset set module
+    fi
+  elif [[ $words[2] == "art" ]]; then
+    _values 'art sub' list add edit use show rm image text distro info
+  fi
+}
+compdef _termfx termfx
+COMPEOF
+        ;;
+      *) die "usage: termfx completion bash|zsh" ;; esac ;;
+  version|-v|--version) "$ENGINE" version ;;
+  help|-h|--help|"") usage ;;
+  *) die "unknown command '$1' (termfx --help)" ;;
+esac

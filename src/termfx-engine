@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+# Public executable and compatibility facade for the modular engine.
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from termfx_engine import *
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -1,0 +1,90 @@
+# termfx configuration  -  edit freely, or use:  termfx set KEY VALUE
+# Changes apply live with:  termfx reload      (or in the next terminal)
+
+enabled   = true
+art       = girl       # name in ~/.config/termfx/art/NAME.txt, a path, or "random"
+effect    = aurora       # see: termfx effect list   (57 effects, or "random")
+palette   = auto         # auto | see: termfx palette list (66 palettes) | "#hex,#hex,#hex"
+speed     = 1.0          # animation speed multiplier
+fps       = 20           # 2..60 (lower = less CPU)
+intensity = 1.0          # brightness 0.3 .. 2.5
+
+# --- Fastfetch system panel
+info       = fastfetch   # fastfetch | auto | builtin | off
+fetch_preset = classic    # panel preset: classic compact minimal clean full gamer server developer aesthetic hybridfetch ultra  (termfx fastfetch list)
+info_config = auto       # auto = generated termfx Fastfetch config; or set a Fastfetch JSONC path
+info_rows  =             # override rows manually (comma-separated); empty = preset decides
+                         # Fastfetch modules in display order. Use: termfx info items to list available
+info_colors = auto       # Fastfetch text colours: auto (match header) | rainbow | palette-name | off
+info_style  = boxed      # Fastfetch layout: boxed | clean | compact | minimal  (set by preset)
+info_gap    = 4          # columns between the art and Fastfetch panel
+info_cmd    =             # optional custom command replacing Fastfetch output
+
+# --- layout
+max_height = 20          # tallest header (rows). Bigger art is auto-scaled
+max_width  = 0           # 0 = half the terminal width
+fit        = auto        # auto (scale then crop) | scale | crop
+crop       = center      # center | top | bottom
+min_cols   = 80          # header hides itself in terminals smaller than this
+min_rows   = 24
+reserve    = 10          # rows always kept free for your shell
+
+# --- eye candy
+intro      = true        # decode/reveal animation when the terminal opens
+stars      = true
+sparkle    = false       # denser twinkles in empty space
+glitch     = false       # random glitch/distortion (off by default)
+sweep      = true        # light sweep across the art
+vignette   = false       # darken edges for a soft focus look
+frame_ms   = 140         # speed of multi-frame art (separate frames with ---FRAME---)
+
+# --- behaviour & extras
+pause      = tui         # tui = pause for vim/htop/ssh/... | always | never
+pause_cmds =             # extra commands that should pause it, e.g. "mycli,foo"
+align      = left        # left | center | right  (header horizontal position)
+rotate     = false       # true = auto-rotate effects/palettes on a timer
+rotate_interval = 300    # seconds between rotations (when rotate = true)
+notification = false     # true = desktop notification when a long command finishes
+notify_after = 10        # seconds threshold for notification
+
+# --- shell UI
+ui     = true            # eza/bat/fzf aliases + keybindings
+prompt = auto            # auto = starship (if installed) | off
+icons  = true
+
+# --- look (change with: termfx theme/prompt/info-style/char/lines/clock  - or edit here, then: termfx theme NAME)
+theme        = catppuccin   # catppuccin tokyonight dracula nord gruvbox rosepine onedark mono | your own (termfx theme new)
+prompt_style = pills        # pills blocks sharp slant minimal plain | custom (hand-edit starship.toml, never overwritten)
+prompt_char  = ❯            # one char = 3-colour gradient, e.g. ❯ ) λ $ ➜
+prompt_lines = 2            # 1 or 2
+clock        = true         # clock on the right of the prompt
+clock_format = %H:%M        # strftime, e.g. %H:%M:%S  or  %a %d %b  %H:%M
+
+# --- Starship controls (change with: termfx starship)
+starship_theme = terminal-match
+starship_newline = true
+starship_right_prompt = false
+starship_follow_symlinks = true
+starship_scan_timeout = 30
+starship_command_timeout = 500
+starship_directory_length = 3
+starship_truncate_to_repo = true
+starship_git_branch_length = 0     # 0 = unlimited
+starship_git_remote = false
+starship_username_always = true
+starship_ssh_only = true
+starship_duration_min = 2000
+starship_time_format = %H:%M
+starship_fill_symbol = ·
+starship_git_symbol = 
+starship_modules = os username hostname directory git_branch git_status python nodejs rust golang java docker_context cmd_duration status time
+starship_git_conflicted = ⚡
+starship_git_ahead = ⇡${count}
+starship_git_behind = ⇣${count}
+starship_git_diverged = ⇕⇡${ahead_count}⇣${behind_count}
+starship_git_untracked = ?${count}
+starship_git_stashed = ≡
+starship_git_modified = !${count}
+starship_git_staged = +${count}
+starship_git_renamed = »
+starship_git_deleted = ✘${count}
