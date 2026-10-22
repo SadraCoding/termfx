@@ -8,20 +8,36 @@ def hex_rgb(h):
         h = "".join(c * 2 for c in h)
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
+# plain colour names usable anywhere a palette is accepted:  termfx palette white
+COLORS = {
+    "white": "ffffff", "snow": "f5f5f5", "silver": "c0c0c0", "gray": "808080", "grey": "808080",
+    "black": "101010", "red": "ff2d2d", "crimson": "dc143c", "orange": "ff8c00", "amber": "ffbf00",
+    "yellow": "ffe600", "lime": "9dff00", "green": "22dd55", "mint-green": "3ddc97", "teal": "00b3a4",
+    "cyan": "00e5ff", "sky-blue": "55b8ff", "blue": "2f6bff", "navy": "1a2a8a", "indigo": "4b3fd8",
+    "purple": "9b4dff", "violet": "b57bff", "magenta": "ff2bd6", "pink": "ff7eb6", "hotpink": "ff3d9a",
+    "brown": "a0623a", "beige": "e8d9b8",
+}
+
+def _color_hex(tok):
+    t = tok.strip().lower()
+    if t in COLORS:
+        return COLORS[t]
+    h = t.lstrip("#")
+    if len(h) in (3, 6) and all(c in "0123456789abcdef" for c in h):
+        return h
+    return None
+
 def palette_stops(name):
     n = (name or "").strip()
     if n.lower() in PALETTES:
         return PALETTES[n.lower()].split()
-    if "," in n or n.startswith("#"):
-        stops = [s for s in re.split(r"[,\s]+", n) if s]
-        try:
-            for s in stops:
-                hex_rgb(s)
-            if len(stops) == 1:
-                stops = stops * 2
-            return stops
-        except Exception:
-            pass
+    # one colour ("white", "#fff", "ff8800") or a list ("red,#00e5ff,white") -> solid / custom gradient
+    toks = [t for t in re.split(r"[,\s]+", n) if t]
+    hexes = [_color_hex(t) for t in toks]
+    if toks and all(hexes):
+        if len(hexes) == 1:
+            hexes = hexes * 2
+        return hexes
     return PALETTES["catppuccin"].split()
 
 def build_lut(stops, n=256):

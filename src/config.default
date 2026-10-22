@@ -22,8 +22,8 @@ info_cmd    =             # optional custom command replacing Fastfetch output
 
 # --- layout
 max_height = 20          # tallest header (rows). Bigger art is auto-scaled
-max_width  = 0           # 0 = half the terminal width
-fit        = auto        # auto (scale then crop) | scale | crop
+max_width  = 0           # 0 = automatic (about half the terminal; art and info panel never overlap)
+fit        = auto        # auto/scale = shrink the WHOLE art to fit (never cut off) | crop = cut the edges instead
 crop       = center      # center | top | bottom
 min_cols   = 80          # header hides itself in terminals smaller than this
 min_rows   = 24

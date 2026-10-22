@@ -77,10 +77,35 @@ cmd_fastfetch() {
   ok "fastfetch preset = $choice"
   regen
 }
+# menu_list CURRENT  - reads "name<TAB>description<TAB>hex hex ..." (or "name  description") lines from stdin and
+# prints them like the installer menu: number, current marker, colour swatches, dim description.
+menu_list() {
+  local cur=$1 i=0 line name desc hexes h sw r g b mark
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    if [[ $line == *$'\t'* ]]; then name=${line%%$'\t'*}; line=${line#*$'\t'}; desc=${line%%$'\t'*}; hexes=${line#*$'\t'}; [[ $line == *$'\t'* ]] || hexes=""
+    else name=${line%% *}; desc=$(sed 's/^[^ ]*[[:space:]]*//' <<<"$line"); hexes=""; fi
+    i=$((i+1)); sw=""
+    if [[ -n $hexes && -n $Z ]]; then
+      for h in $hexes; do r=$((16#${h:0:2})); g=$((16#${h:2:2})); b=$((16#${h:4:2})); sw+=$(printf '\033[48;2;%d;%d;%dm  ' "$r" "$g" "$b"); done
+      sw+=$Z
+    fi
+    mark=" "; [[ $name == "$cur" ]] && mark="${G}●${Z}"
+    printf ' %s %s%3d)%s %-16s %s %s%s%s\n' "$mark" "$M" "$i" "$Z" "$name" "$sw" "$D" "$desc" "$Z"
+  done
+}
 choose() { # KEY NAME LISTCMD...
   local k=$1 n=$2; shift 2
-  if [[ $n == list || -z $n ]]; then "$@" | sed "s/^/   /"; say "${D}current: $(cfg_get "$k")${Z}"; return; fi
-  local all; all=$("$@" | awk '{print $1}'); grep -qx -- "$n" <<<"$all" || die "unknown '$n' (try: list)"
+  local cur; cur=$(cfg_get "$k")
+  if [[ $n == list || -z $n ]]; then
+    local cmd=("$@")
+    [[ $k == theme ]] && cmd=("$THEMES" --list theme-swatches)
+    say ""; "${cmd[@]}" | menu_list "$cur"
+    say ""; say "${D}current: ${cur:-default}   -   pick with: termfx $CHOOSE_CMD NAME  (or its number)${Z}"; return
+  fi
+  local all; all=$("$@" | awk '{print $1}')
+  [[ $n =~ ^[0-9]+$ ]] && { local nn; nn=$(sed -n "${n}p" <<<"$all"); [[ -n $nn ]] && n=$nn; }
+  grep -qx -- "$n" <<<"$all" || die "unknown '$n' (try: list)"
   cfg_set "$k" "$n"; ok "$k = $n"; regen
 }
 
@@ -221,17 +246,15 @@ finish_art() { # file name use
 }
 
 valid_palette() {
-  local p=$1 all
+  local p=$1 all s names
   [[ $p == auto ]] && return 0
-  if [[ $p == \#* || $p == *,* ]]; then
-    # custom hex list - engine validates at runtime; do a light check here
-    local s
-    for s in ${p//,/ }; do
-      s=${s#\#}
-      [[ $s =~ ^[0-9A-Fa-f]{3}$ || $s =~ ^[0-9A-Fa-f]{6}$ ]] || die "bad colour in palette: '$s' (want #rgb or #rrggbb)"
-    done
-    return 0
-  fi
   all=$("$ENGINE" list palettes 2>/dev/null)
-  grep -qx -- "$p" <<<"$all" || die "unknown palette '$p' (termfx palette list)"
+  grep -qx -- "$p" <<<"$all" && return 0
+  # a single colour name / hex ("white", "#fff") or a list ("red,#00e5ff,white")
+  names=$("$ENGINE" list color-names 2>/dev/null)
+  for s in ${p//,/ }; do
+    s=${s#\#}
+    if [[ $s =~ ^[0-9A-Fa-f]{3}$ || $s =~ ^[0-9A-Fa-f]{6}$ ]] || grep -qx -- "${s,,}" <<<"$names"; then continue; fi
+    die "unknown palette or colour '$p' (termfx palette list | termfx palette colors)"
+  done
 }

@@ -4,11 +4,14 @@ cmd_art() {
     list)
       local cur; cur=$(cfg_get art); mkdir -p "$ART_DIR"
       shopt -s nullglob
+      local i=0 f n
+      say ""
       for f in "$ART_DIR"/*.txt; do
-        local n=${f##*/}; n=${n%.txt}
-        printf ' %s %-18s %s%5s lines  %s%s\n' "$([[ $n == "$cur" ]] && echo "${G}●${Z}" || echo ' ')" "$n" "$D" "$(wc -l < "$f")" "$(du -h "$f" | cut -f1)" "$Z"
+        n=${f##*/}; n=${n%.txt}; i=$((i+1))
+        printf ' %s %s%3d)%s %-18s %s%5s lines  %s%s\n' "$([[ $n == "$cur" ]] && echo "${G}●${Z}" || echo ' ')" "$M" "$i" "$Z" "$n" "$D" "$(wc -l < "$f")" "$(du -h "$f" | cut -f1)" "$Z"
       done
-      say "${D}current: ${cur:-girl}   (also: random)${Z}" ;;
+      say ""
+      say "${D}current: ${cur:-girl}   -   pick with: termfx art use NAME  (or its number, or random)${Z}" ;;
     add|paste)
       local n=${1:?usage: termfx art add NAME [FILE|URL|-] [-u]} src="" use=0; shift
       for a in "$@"; do case $a in -u|--use) use=1;; *) src=$a;; esac; done
@@ -30,6 +33,7 @@ cmd_art() {
       say "use it with: termfx art use $n" ;;
     use)
       local n=${1:?usage: termfx art use NAME}
+      if [[ $n =~ ^[0-9]+$ ]]; then local nn; nn=$(ls "$ART_DIR"/*.txt 2>/dev/null | sed -n "${n}p"); [[ -n $nn ]] || die "no art number $n (termfx art list)"; n=${nn##*/}; n=${n%.txt}; fi
       [[ $n == random || -f $n || -f $(art_file "$n") ]] || die "unknown art '$n' (termfx art list)"
       cfg_set art "$n"; "$ENGINE" prepare 2>/dev/null; ok "art = $n"; reload ;;
     show) cat -- "$(art_file "${1:?name}")" ;;

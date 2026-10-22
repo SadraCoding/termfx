@@ -30,6 +30,7 @@ DEFAULTS = {
     "info_colors": "auto", "fetch_preset": "classic",
 }
 OVERRIDES = {}
+OFF_NAMES = ("off", "none", "plain", "false", "no", "0")   # effect = off  -> still, uncoloured art
 
 # name -> short description (shown by: termfx effect list)
 EFFECTS = (

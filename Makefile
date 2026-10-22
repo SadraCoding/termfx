@@ -1,7 +1,9 @@
 .PHONY: build test lint clean
 build:           ## build dist/termfx-install.sh (single file for end users)
 	./build.sh
-test: build      ## smoke-test both the source tree and the built installer
+test: build      ## layout test + smoke-test both the source tree and the built installer
+	python3 tests/layout_test.py
+	python3 tests/session_test.py
 	./tests/smoke.sh ./install.sh
 	./tests/smoke.sh dist/termfx-install.sh
 lint:            ## needs shellcheck

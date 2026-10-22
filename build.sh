@@ -14,7 +14,7 @@ ENGINE_FILES=(src/termfx_engine/__init__.py src/termfx_engine/__main__.py
               src/termfx_engine/_color.py src/termfx_engine/_art.py
               src/termfx_engine/_info.py src/termfx_engine/_layout.py
               src/termfx_engine/_effects.py src/termfx_engine/_render.py
-              src/termfx_engine/_commands.py)
+              src/termfx_engine/_menu.py src/termfx_engine/_commands.py)
 
 for f in "${FILES[@]}"; do
   [[ $f == engine_bundle ]] && continue

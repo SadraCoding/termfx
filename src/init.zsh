@@ -54,7 +54,16 @@ _termfx_resume_header() {
     sleep 0.025
   done
 }
-_termfx_cls() { local p h=0 par; _termfx_resume_header; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h == <-> ]] || h=0; print -n "\e[2J\e[$((h+1));1H"; }
+_termfx_cls() {
+  local p h=0 par
+  _termfx_resume_header
+  [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"
+  [[ $h == <-> ]] || h=0
+  (( h > 0 )) && _TFX_LASTH=$h
+  print -n "\e[2J\e[$((h+1));1H"
+  [[ -n ${p:-} ]] && (( h > 0 )) && kill -USR2 $p 2>/dev/null      # repaint the header right now (the 2J wiped it)
+  return 0
+}
 clear() { if [[ -n ${TERMFX_FLAG:-} ]]; then _termfx_cls; else command clear "$@"; fi }
 _termfx_hide_header() {
   local p h par i
@@ -62,6 +71,7 @@ _termfx_hide_header() {
   read -r p h par < "$TERMFX_FLAG.state"
   [[ ${h:-0} == <-> ]] && (( h > 0 )) || return 0
   local hh=$h j
+  _TFX_LASTH=$h
   : >| "$TERMFX_FLAG"
   for ((i=0; i<40; i++)); do
     read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
@@ -82,15 +92,22 @@ _termfx_hide_header() {
 }
 _termfx_widget_cls() { _termfx_cls; zle reset-prompt }
 
-# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
-_termfx_screen_full() {
-  local pos r rows=${LINES:-0}
+# Where is the cursor?  Sets _TFX_ROW (1-based) or returns 1.
+_termfx_cursor_row() {
+  local pos r
+  _TFX_ROW=
   print -n '\e[6n' >/dev/tty 2>/dev/null || return 1
   IFS= read -rs -t 0.3 -d R pos </dev/tty 2>/dev/null || return 1
   r=${pos##*\[}; r=${r%;*}
   [[ $r == <-> ]] || return 1
+  _TFX_ROW=$r
+}
+# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
+_termfx_screen_full() {
+  local rows=${LINES:-0}
+  [[ -n ${_TFX_ROW:-} ]] || return 1
   (( rows > 0 )) || rows=$(tput lines 2>/dev/null || echo 0)
-  (( rows > 0 && r >= rows ))
+  (( rows > 0 && _TFX_ROW >= rows ))
 }
 # The header is hidden while a command runs, so its output can use the whole screen (and scrollback).
 _termfx_preexec() {
@@ -102,9 +119,16 @@ _termfx_preexec() {
 }
 _termfx_precmd() {
   if [[ -n ${TERMFX_FLAG:-} && -z ${_TFX_HELD:-} ]]; then
+    _termfx_cursor_row
     if _termfx_screen_full; then                       # output reached the bottom: stay hidden until clear
       _TFX_HELD=1; [[ -e $TERMFX_FLAG ]] || _termfx_hide_header
-    elif [[ -e $TERMFX_FLAG ]]; then command rm -f -- "$TERMFX_FLAG"; fi
+    else
+      # the prompt must never start inside the header rows (after clear / reset the cursor is at the top)
+      if [[ -n ${_TFX_ROW:-} ]] && (( ${_TFX_LASTH:-0} > 0 && _TFX_ROW <= _TFX_LASTH )); then
+        print -n "\e[$((_TFX_LASTH + 1));1H"
+      fi
+      [[ -e $TERMFX_FLAG ]] && command rm -f -- "$TERMFX_FLAG"
+    fi
   fi
   # notification for long-running commands
   if [[ ${TFX_NOTIFY} == true && -n ${_TFX_CMD_START:-} ]] && (( SECONDS - _TFX_CMD_START >= TFX_NOTIFY_AFTER )); then
@@ -152,7 +176,7 @@ _termfx_boot() {
     fi
     return 0
   fi
-  typeset -g _TFX_MODE=${f[4]:-auto} _TFX_HELD=
+  typeset -g _TFX_MODE=${f[4]:-auto} _TFX_HELD= _TFX_LASTH=$h
   export TERMFX_FLAG="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/termfx-$UID-$$" TERMFX_ACTIVE=1
   command rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"
   printf '\e[2J\e[%d;%dr\e[%d;1H' $((h+1)) $rows $((h+1))

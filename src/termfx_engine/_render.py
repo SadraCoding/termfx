@@ -1,5 +1,5 @@
 from ._shared import (
-    EFFECTS, EFFECT_PALETTE, UTF8, math, os,
+    EFFECTS, EFFECT_PALETTE, OFF_NAMES, UTF8, math, os,
     random, time,
 )
 from ._system import (
@@ -22,6 +22,10 @@ class Renderer:
         self.cfg, self.lay = cfg, lay
         self.truecolor = truecolor_on(cfg)
         fx = cfg["effect"].strip().lower()
+        # effect = off: no animation, no colour effect - the art is drawn once, in plain colour
+        self.static = fx in OFF_NAMES
+        if self.static:
+            fx = "static"
         if fx not in EFFECTS:
             fx = "aurora"
         if fx == "random":
@@ -32,28 +36,45 @@ class Renderer:
             pal = EFFECT_PALETTE.get(fx, "catppuccin")
         self.lut = build_lut(palette_stops(pal))
         self.sp = max(0.1, as_float(cfg["speed"], 1.0))
-        self.fx = Fx(fx, lay.aw + 2, lay.H, self.sp)
-        self.effect_name = fx
+        self.fx = Fx(fx, lay.aw + 2, lay.art_rows, self.sp)
+        self.effect_name = "off" if self.static else fx
         self.frame_ms = max(40, as_int(cfg["frame_ms"], 140))
-        self.stars_on = as_bool(cfg["stars"])
-        self.glitch_on = as_bool(cfg["glitch"])
-        self.sweep_on = as_bool(cfg["sweep"])
-        self.intro_on = as_bool(cfg["intro"])
-        self.sparkle_on = as_bool(cfg.get("sparkle", "false"))
-        self.vignette_on = as_bool(cfg.get("vignette", "false"))
+        on = not self.static
+        self.stars_on = on and as_bool(cfg["stars"])
+        self.glitch_on = on and as_bool(cfg["glitch"])
+        self.sweep_on = on and as_bool(cfg["sweep"])
+        self.intro_on = on and as_bool(cfg["intro"])
+        self.sparkle_on = on and as_bool(cfg.get("sparkle", "false"))
+        self.vignette_on = on and as_bool(cfg.get("vignette", "false"))
+
         self.intensity = max(0.3, min(2.5, as_float(cfg.get("intensity", "1.0"), 1.0)))
         self.cache = {}
+        self._bnd = {}
         self.stars = {}
         rnd = random.Random(3)
-        self.rnd = [[rnd.random() for _ in range(lay.aw + 2)] for _ in range(lay.H)]
+        self.rnd = [[rnd.random() for _ in range(lay.aw + 2)] for _ in range(lay.art_rows)]
         self.star_chars = "·+*✦" if UTF8 else ".+*#"
-        self.align = cfg.get("align", "left").strip().lower()
-        if self.align == "center":
-            self.align_pad = max(0, (lay.cols - lay.aw - 2) // 2)
-        elif self.align == "right":
-            self.align_pad = max(0, lay.cols - lay.aw - 2)
+        self.align_pad = lay.art_x      # decided once in build_layout, together with the info panel position
+        # plain colour for effect = off: the terminal's own text colour, or the palette's middle colour if one was chosen
+        if cfg["palette"].strip().lower() in ("", "auto"):
+            self.plain_col = "\x1b[39m"
         else:
-            self.align_pad = 0
+            self.plain_col = self.esc(0.5, 1.0)
+
+    def _bounds(self, frame):
+        """Per row: (first, last) column holding art; (1, 0) for an empty row."""
+        b = self._bnd.get(id(frame))
+        if b is None:
+            b = []
+            for row in frame:
+                ink = [i for i, ch in enumerate(row) if ch not in (" ", "")]
+                b.append((ink[0], ink[-1] + (1 if row[ink[-1]] == "" else 0)) if ink else (1, 0))
+            self._bnd[id(frame)] = b
+        return b
+
+    def clear_seq(self, top=0):
+        """Erase every row of the header block (used after a resize/reload so no old frame lingers)."""
+        return "".join("\x1b[%d;1H\x1b[2K" % (top + r + 1) for r in range(self.lay.H))
 
     def esc(self, x, b):
         b = b * self.intensity
@@ -75,10 +96,10 @@ class Renderer:
 
     def render(self, t, top=0, save=True):
         L = self.lay
-        H, aw, ah = L.H, L.aw, L.ah
+        H, aw, ah = L.art_rows, L.aw, L.ah
         frames = L.frames
         frame = frames[int(t * 1000 / self.frame_ms) % len(frames)] if len(frames) > 1 else frames[0]
-        y_off = (H - ah) // 2
+        y_off = L.art_y
         bw = aw + 2
         glitch = {}
         if self.glitch_on and t > 1.5 and random.random() < 0.05:
@@ -89,11 +110,16 @@ class Renderer:
         stars = self.stars
         spawn = 6 if self.sparkle_on else (3 if self.stars_on else 0)
         if spawn:
+            bnd = self._bounds(frame)
             for _ in range(spawn):
                 r, c = random.randrange(H), random.randrange(bw)
                 ar = r - y_off
-                if not (0 <= ar < ah and c < len(frame[ar] if ar < len(frame) else []) and frame[ar][c] not in (" ", "")):
-                    stars[(r, c)] = random.randint(6, 18 if self.sparkle_on else 15)
+                # sparkles only live OUTSIDE the drawing: never in holes or between the strokes of the art
+                if 0 <= ar < len(bnd):
+                    lo, hi = bnd[ar]
+                    if lo <= c <= hi:
+                        continue
+                stars[(r, c)] = random.randint(6, 18 if self.sparkle_on else 15)
         esc, fx = self.esc, self.fx
         g_mag, g_cyan = "\x1b[38;2;255;80;220m", "\x1b[38;2;80;255;255m"
         cx, cy = (bw - 1) / 2.0, (H - 1) / 2.0
@@ -118,6 +144,8 @@ class Renderer:
                     if ip is not None and rn[c] * 0.7 + c / bw * 0.3 > ip * 1.02:
                         ch = random.choice(self.SCRAMBLE) if random.random() < 0.5 else " "
                         col = esc(0.1, 0.55)
+                    elif self.static:
+                        col = self.plain_col
                     elif shift:
                         col = g_mag if (c + ar) & 1 else g_cyan
                     else:
@@ -144,10 +172,8 @@ class Renderer:
             buf.append("".join(parts))
         info = L.info
         if info:
-            iy = max(0, (H - len(info)) // 2)
-            room = L.cols - L.info_col
-            for i, l in enumerate(info[:H]):
-                buf.append("\x1b[%d;%dH%s\x1b[0m\x1b[K" % (top + iy + i + 1, L.info_col + 1, clip_ansi(l, room)))
+            for i, l in enumerate(info[:L.H - L.info_y]):
+                buf.append("\x1b[%d;%dH%s\x1b[0m\x1b[K" % (top + L.info_y + i + 1, L.info_x + 1, clip_ansi(l, L.info_w)))
         buf.append("\x1b[0m\x1b[?7h")
         if save:
             buf.append("\x1b8")

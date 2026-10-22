@@ -142,6 +142,10 @@ def main():
     if len(sys.argv) > 2 and sys.argv[1] == "--list":
         w = sys.argv[2]
         if w == "themes":  print("\n".join(sorted(THEMES)))
+        elif w == "theme-swatches":   # name + the colours that matter, for the pretty menu
+            for k in sorted(THEMES):
+                t = THEMES[k]
+                print(k + "\t\t" + " ".join(t[c].lstrip("#") for c in ("pink", "mauve", "blue", "sky", "teal", "green", "yellow", "peach", "red") if c in t))
         elif w == "prompts": print("\n".join("%-9s %s" % (k, v[2]) for k, v in SHAPES.items()))
         elif w == "infos":  print("\n".join("%-9s %s" % (k, v) for k, v in INFOS.items()))
         elif w == "starship": print("\n".join("%-22s %s" % (k, v[0]) for k, v in STARSHIP_THEMES.items()))

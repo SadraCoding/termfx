@@ -55,7 +55,16 @@ __termfx_resume_header() {
     sleep 0.025
   done
 }
-__termfx_cls() { local p h=0 par; __termfx_resume_header; [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"; [[ $h =~ ^[0-9]+$ ]] || h=0; printf '\e[2J\e[%d;1H' $((h+1)); }
+__termfx_cls() {
+  local p h=0 par
+  __termfx_resume_header
+  [[ -r ${TERMFX_FLAG:-/nonexistent}.state ]] && read -r p h par < "$TERMFX_FLAG.state"
+  [[ $h =~ ^[0-9]+$ ]] || h=0
+  ((h > 0)) && __TFX_LASTH=$h
+  printf '\e[2J\e[%d;1H' $((h+1))
+  [[ -n ${p:-} ]] && ((h > 0)) && kill -USR2 "$p" 2>/dev/null     # repaint the header right now (the 2J wiped it)
+  return 0
+}
 clear() { if [[ -n ${TERMFX_FLAG:-} ]]; then __termfx_cls; else command clear "$@"; fi; }
 __termfx_hide_header() {
   local p h par i
@@ -63,6 +72,7 @@ __termfx_hide_header() {
   read -r p h par < "$TERMFX_FLAG.state"
   [[ ${h:-0} =~ ^[0-9]+$ ]] && ((h > 0)) || return 0
   local hh=$h
+  __TFX_LASTH=$h
   : > "$TERMFX_FLAG"
   for ((i=0; i<40; i++)); do
     read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
@@ -82,15 +92,22 @@ __termfx_hide_header() {
   printf '\e8\e[r'
 }
 
-# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
-__termfx_screen_full() {
-  local pos r rows=${LINES:-0}
+# Where is the cursor?  Sets __TFX_ROW (1-based) or returns 1.
+__termfx_cursor_row() {
+  local pos r
+  __TFX_ROW=
   printf '\e[6n' >/dev/tty 2>/dev/null || return 1
   IFS= read -rs -t 0.3 -d R pos </dev/tty 2>/dev/null || return 1
   r=${pos##*[}; r=${r%;*}
   [[ $r =~ ^[0-9]+$ ]] || return 1
+  __TFX_ROW=$r
+}
+# Reached the bottom of the screen? Then the header hides itself until `clear` / Ctrl-L.
+__termfx_screen_full() {
+  local rows=${LINES:-0}
+  [[ -n ${__TFX_ROW:-} ]] || return 1
   ((rows > 0)) || rows=$(tput lines 2>/dev/null || echo 0)
-  ((rows > 0 && r >= rows))
+  ((rows > 0 && __TFX_ROW >= rows))
 }
 # The header is hidden while a command runs, so its output can use the whole screen (and scrollback).
 __termfx_preexec() {
@@ -103,9 +120,17 @@ __termfx_preexec() {
 }
 __termfx_post() {
   if [[ -n ${TERMFX_FLAG:-} && -z ${__TFX_HELD:-} ]]; then
+    __termfx_cursor_row
     if __termfx_screen_full; then                      # output reached the bottom: stay hidden until clear
       __TFX_HELD=1; [[ -e $TERMFX_FLAG ]] || __termfx_hide_header
-    elif [[ -e $TERMFX_FLAG ]]; then rm -f -- "$TERMFX_FLAG"; fi
+    else
+      # The prompt must never start inside the header rows (a command that cleared or reset the screen
+      # leaves the cursor at the top): move it just below the header before the prompt is drawn.
+      if [[ -n ${__TFX_ROW:-} && ${__TFX_LASTH:-0} -gt 0 ]] && ((__TFX_ROW <= __TFX_LASTH)); then
+        printf '\e[%d;1H' $((__TFX_LASTH + 1))
+      fi
+      [[ -e $TERMFX_FLAG ]] && rm -f -- "$TERMFX_FLAG"
+    fi
   fi
   if [[ ${TFX_NOTIFY} == true && -n ${__TFX_CMD_START:-} ]] && (( SECONDS - __TFX_CMD_START >= TFX_NOTIFY_AFTER )); then
     local elapsed=$(( SECONDS - __TFX_CMD_START ))
@@ -117,11 +142,12 @@ __termfx_post() {
 __termfx_debug() {
   [[ -n ${__TFX_READY:-} ]] || return 0
   [[ -n ${COMP_LINE:-} ]] && return 0
+  case $BASH_COMMAND in __termfx_*|__bp_*|_fzf_*|__fzf_*) return 0 ;; esac    # our own helpers / key bindings are not user commands
   __TFX_READY=
   __termfx_preexec "$BASH_COMMAND"
 }
 __termfx_exit() { [[ -n ${TERMFX_FLAG:-} ]] && rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"; printf '\e[r'; }
-__termfx_ctrl_l() { __termfx_cls; printf '%s%s' "${PS1@P}" "$READLINE_LINE"; }
+__termfx_ctrl_l() { __termfx_cls; }
 
 __termfx_hooks() {
   if declare -F __bp_precmd_invoke_cmd >/dev/null 2>&1; then          # bash-preexec present
@@ -161,7 +187,7 @@ __termfx_boot() {
     fi
     return 0
   fi
-  __TFX_MODE=${mode:-auto}; __TFX_HELD=
+  __TFX_MODE=${mode:-auto}; __TFX_HELD=; __TFX_LASTH=$h
   export TERMFX_FLAG="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/termfx-$UID-$$" TERMFX_ACTIVE=1
   rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"
   printf '\e[2J\e[%d;%dr\e[%d;1H' $((h+1)) "${rows:-${LINES:-40}}" $((h+1))

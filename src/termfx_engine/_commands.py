@@ -8,7 +8,7 @@ Options:   --set key=value (repeatable)
 
 from ._shared import (
     ANSI_RE, ART_DIR, CACHE_DIR, CONF_FILE, EFFECTS,
-    EFFECT_DESC, EFFECT_PALETTE, OVERRIDES, PALETTES,
+    EFFECT_DESC, EFFECT_PALETTE, OFF_NAMES, OVERRIDES, PALETTES,
     UTF8, VERSION, errno, glob, os,
     random, re, select, shutil, signal,
     sys, time,
@@ -18,7 +18,7 @@ from ._system import (
     load_config, log_error, term_size,
 )
 from ._color import (
-    build_lut, hex_rgb, truecolor_on,
+    COLORS, build_lut, hex_rgb, palette_stops, truecolor_on,
 )
 from ._art import (
     parse_art, resolve_art,
@@ -32,6 +32,7 @@ from ._layout import (
 from ._render import (
     Renderer,
 )
+from ._menu import run as run_menu
 
 def write_state(flag, H, parent):
     try:
@@ -53,10 +54,11 @@ def hide_header(out, height):
 
 def cmd_run(flag, parent):
     out = Out()
-    stop = {"v": False, "reload": False}
+    stop = {"v": False, "reload": False, "redraw": False}
     signal.signal(signal.SIGTERM, lambda *a: stop.__setitem__("v", True))
     signal.signal(signal.SIGHUP, lambda *a: stop.__setitem__("v", True))
     signal.signal(signal.SIGUSR1, lambda *a: stop.__setitem__("reload", True))
+    signal.signal(signal.SIGUSR2, lambda *a: stop.__setitem__("redraw", True))   # shell just cleared the screen: paint again now
     for s in ("SIGINT", "SIGTTOU", "SIGTTIN", "SIGPIPE"):
         try:
             signal.signal(getattr(signal, s), signal.SIG_IGN)
@@ -68,8 +70,11 @@ def cmd_run(flag, parent):
     region_H = 0
     paused = False
     first = True
+    drawn = False
     t0 = time.time()
     last_rotate = t0
+    last_draw = 0.0          # when the header was last painted
+    last_region = 0.0        # when the scroll region was last re-asserted
     try:
         while not stop["v"] and alive(parent):
             try:
@@ -102,7 +107,7 @@ def cmd_run(flag, parent):
                     t0 = time.time()
                     last_rotate = t0
                 # auto-rotate effects/palettes
-                if as_bool(cfg.get("rotate", "false")):
+                if as_bool(cfg.get("rotate", "false")) and cfg["effect"].strip().lower() not in OFF_NAMES:
                     interval = max(30, as_int(cfg.get("rotate_interval", "300"), 300))
                     if time.time() - last_rotate >= interval:
                         pool = [e for e in EFFECTS if e != "random"]
@@ -113,6 +118,7 @@ def cmd_run(flag, parent):
                 size = term_size()
                 if size != last_size or rebuild:
                     last_size = size
+                    drawn = False
                     new = build_layout(cfg, size[0], size[1])
                     if new is None:
                         if region_H:
@@ -131,15 +137,33 @@ def cmd_run(flag, parent):
                         elif new.H != region_H:
                             out.write("\x1b[2J\x1b[%d;%dr\x1b[%d;1H" % (new.H + 1, size[1], new.H + 1))
                             region_H = new.H
-                        else:
-                            out.write("\x1b7\x1b[%d;%dr\x1b8" % (new.H + 1, size[1]))
+                        else:                     # resize / reload with the same height: wipe the old frame first
+                            out.write("\x1b7%s\x1b[%d;%dr\x1b8" % (rend.clear_seq(), new.H + 1, size[1]))
                         write_state(flag, new.H, parent)
                     first = False
                 if rend is None or paused or os.path.exists(flag):
                     time.sleep(0.25)
                     continue
                 t1 = time.time()
-                out.write(rend.render(t1 - t0))
+                if stop["redraw"]:
+                    stop["redraw"] = False
+                    drawn = False
+                if rend.static and drawn and t1 - last_draw < 0.5:
+                    # effect off: nothing moves, but a `clear` / reset / program can wipe the screen, so the
+                    # still header is repainted twice a second (a few KB, no CPU) and heals itself.
+                    time.sleep(0.1)
+                    continue
+                pre = ""
+                if region_H and (not drawn or rend.static or t1 - last_region >= 1.0):
+                    # Something may have reset the scroll region (reset, tput reset, ssh, a crashed full-screen
+                    # program...). Without it output would scroll over the header, so assert it again.
+                    pre = "\x1b7\x1b[%d;%dr\x1b8" % (region_H + 1, last_size[1])
+                    last_region = t1
+                out.write(pre + rend.render(t1 - t0))
+                last_draw = t1
+                drawn = True
+                if rend.static:
+                    continue
                 dt = 1.0 / max(2, min(60, as_int(cfg["fps"], 16))) - (time.time() - t1)
                 time.sleep(max(0.01, dt))
             except OSError as e:
@@ -230,6 +254,12 @@ def cmd_art_info(cfg, name):
     if cols:
         lay = build_layout(cfg, cols, rows, force=True)
         print("fitted : %d cols x %d rows  (terminal %dx%d, header height %d)" % (lay.aw, lay.ah, cols, rows, lay.H))
+        if lay.scale < 1.0:
+            print("resize : scaled to %d%% of the original (whole art kept, nothing cropped)" % round(lay.scale * 100))
+        else:
+            print("resize : none needed, shown at full size")
+        print("layout : %s" % {"side": "art + info panel side by side", "stacked": "art above the info panel",
+                               "art": "art only (no room for the info panel)"}.get(lay.mode, lay.mode))
     return 0
 
 def cmd_distro_logo(name):
@@ -282,6 +312,11 @@ def cmd_effect_info(name):
         for e in EFFECTS:
             print("%-14s %s" % (e, EFFECT_DESC.get(e, "")))
         return 0
+    if name in OFF_NAMES:
+        print("name      : off")
+        print("desc      : no effect - still art in plain colour, nothing animates")
+        print("turn on   : termfx effect on")
+        return 0
     if name not in EFFECTS:
         print("unknown effect '%s'" % name, file=sys.stderr)
         return 1
@@ -298,10 +333,13 @@ def cmd_palette_show(name):
     if not name or name == "list":
         print("\n".join(sorted(PALETTES)))
         return 0
-    if name not in PALETTES:
-        print("unknown palette '%s'" % name, file=sys.stderr)
+    if name in PALETTES:
+        stops = PALETTES[name].split()
+    elif palette_stops(name) != PALETTES["catppuccin"].split() or name == "catppuccin":
+        stops = palette_stops(name)
+    else:
+        print("unknown palette or colour '%s'" % name, file=sys.stderr)
         return 1
-    stops = PALETTES[name].split()
     print("palette : %s (%d colours)" % (name, len(stops)))
     print("hex     : %s" % " ".join("#" + s for s in stops))
     # render colour blocks
@@ -406,6 +444,13 @@ def main(argv):
         elif what == "effect-menu":
             for e in EFFECTS:
                 print("%s\t%s\t%s" % (e, EFFECT_DESC.get(e, ""), EFFECT_PALETTE.get(e, "catppuccin")))
+        elif what == "colors":
+            for n, h in COLORS.items():
+                r, g, b = hex_rgb(h)
+                sw = ("\x1b[48;2;%d;%d;%dm    \x1b[0m " % (r, g, b)) if sys.stdout.isatty() else ""
+                print("%s%-12s #%s" % (sw, n, h))
+        elif what == "color-names":
+            print("\n".join(COLORS))
         elif what == "palette-menu":
             for name in sorted(PALETTES):
                 stops = PALETTES[name].split()
@@ -417,6 +462,8 @@ def main(argv):
         elif what == "info-items":
             return cmd_info_items()
         return 0
+    if cmd == "menu":
+        return run_menu(args[0] if args else "effects", cfg)
     if cmd == "effect-info":
         return cmd_effect_info(args[0] if args else "")
     if cmd == "palette-show":
