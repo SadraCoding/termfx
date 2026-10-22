@@ -452,7 +452,3 @@ tests/session_test.py       real-shell test: header, prompt and output never ove
 ```
 
 Run `make test` to run every test. Run `make build` after source changes to regenerate `dist/termfx-install.sh`. The smoke test uses `--no-packages`; it checks installer lifecycle but does not verify downloads or repository package availability on each distribution. For release validation, test package installation separately in clean distro environments with network access.
-
-<p align="center">
-  <img src="media/border.png" alt="termfx border" width="100%">
-</p>
