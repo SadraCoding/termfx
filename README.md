@@ -1,4 +1,6 @@
-# termfx
+# TermFX
+
+![TermFX Border](media/border.png)
 
 **An animated ASCII header for your terminal, plus a modern shell look.** Every time you open a terminal you get a living picture (aurora, fire, matrix rain, 70+ more) next to a panel with your system info, and a good-looking prompt underneath. Works in **Bash and Zsh on Linux**. The animation engine needs only Python 3's standard library: no downloads, no GPU.
 
