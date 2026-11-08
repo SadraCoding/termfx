@@ -1,4 +1,6 @@
 #!/bin/sh
+# shellcheck shell=bash
+# The file starts as POSIX sh only to re-exec itself under bash (see below).
 # =============================================================================
 #  termfx installer - animated terminal header + modern shell UI
 #  Beginner-friendly: installs what it needs, backs up and resets old
@@ -41,20 +43,12 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/termfx"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/termfx"
 FONT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/JetBrainsMonoNerd"
 MARK_BEGIN="# >>> termfx >>>"
-MARK_END="# <<< termfx <<<"
 SELF="${BASH_SOURCE[0]:-$0}"
-#@DIST_FLAG
-if [[ ${TERMFX_DIST:-0} != 1 ]]; then ROOT="$(cd "$(dirname "$SELF")" && pwd)"; fi
-#@EMBED
+ROOT="$(cd "$(dirname "$SELF")" && pwd)"
+ART_NAMES=$(cd "$ROOT/src/art" && for f in *.txt; do printf '%s ' "${f%.txt}"; done)
 
-# emit KEY: print a project file (from the source tree, or embedded in the built single-file installer)
-emit() {
-  if [[ ${TERMFX_DIST:-0} == 1 ]]; then
-    local fn="__emb_${1//[^A-Za-z0-9]/_}"; "$fn"
-  else
-    cat -- "$ROOT/$1"
-  fi
-}
+# emit KEY: print a project file from the source tree
+emit() { cat -- "$ROOT/$1"; }
 put() { # KEY DEST [MODE]
   mkdir -p "$(dirname "$2")"; emit "$1" > "$2"; chmod "${3:-644}" "$2"
 }
@@ -109,25 +103,14 @@ done
 case $SHELLS in auto|zsh|bash|both) ;; *) die "--shell must be auto|zsh|bash|both" ;; esac
 
 # ---------------------------------------------------------------- file writers
-ART_NAMES="girl arch tux blocks spinner"
-ENGINE_MODULES=(src/termfx_engine/__init__.py src/termfx_engine/__main__.py
-                src/termfx_engine/_shared.py src/termfx_engine/_system.py
-                src/termfx_engine/_color.py src/termfx_engine/_art.py
-                src/termfx_engine/_info.py src/termfx_engine/_layout.py
-                src/termfx_engine/_effects.py src/termfx_engine/_render.py
-                src/termfx_engine/_menu.py src/termfx_engine/_commands.py)
-CLI_MODULES=(src/termfx.d/settings.sh src/termfx.d/art.sh src/termfx.d/status.sh)
+CLI_MODULES="settings.sh commands.sh art.sh status.sh help.sh completion.sh"
 write_engine() {
   put src/termfx-engine "$BIN_DIR/termfx-engine" 755
-  if [[ ${TERMFX_DIST:-0} == 1 ]]; then
-    emit engine_bundle | python3 -c 'import io,sys,zipfile; zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).extractall(sys.argv[1])' "$BIN_DIR/termfx_engine"
-  else
-    local f; for f in "${ENGINE_MODULES[@]}"; do put "$f" "$BIN_DIR/termfx_engine/${f##*/}"; done
-  fi
+  local f; for f in "$ROOT"/src/termfx_engine/*.py; do put "src/termfx_engine/${f##*/}" "$BIN_DIR/termfx_engine/${f##*/}"; done
 }
 write_cli() {
   put src/termfx "$BIN_DIR/termfx" 755
-  local f; for f in "${CLI_MODULES[@]}"; do put "$f" "$BIN_DIR/termfx.d/${f##*/}"; done
+  local f; for f in $CLI_MODULES; do put "src/termfx.d/$f" "$BIN_DIR/termfx.d/$f"; done
   put gen/themes.py "$BIN_DIR/termfx-themes" 755
 }
 write_init_zsh()  { put src/init.zsh  "$CONF_DIR/init.zsh"; }
@@ -154,41 +137,38 @@ rc_patch() { # file mode(install|clean|uninstall) init keep_fetch
 # keep a copy of the installer so  termfx uninstall / termfx restore  work later
 keep_installer_copy() {
   mkdir -p "$DATA_DIR"
-  if [[ ${TERMFX_DIST:-0} == 1 ]]; then
-    if [[ -r $SELF && -f $SELF ]]; then install -m755 "$SELF" "$DATA_DIR/install.sh" 2>/dev/null || true; fi
-  else
-    rm -rf "$DATA_DIR/tree"; mkdir -p "$DATA_DIR/tree"
-    cp -r "$ROOT/install.sh" "$ROOT/lib" "$ROOT/src" "$ROOT/gen" "$DATA_DIR/tree/"
-    printf '#!/bin/sh\nexec sh "%s/tree/install.sh" "$@"\n' "$DATA_DIR" > "$DATA_DIR/install.sh"
-    chmod 755 "$DATA_DIR/install.sh"
-  fi
+  rm -rf "$DATA_DIR/tree"; mkdir -p "$DATA_DIR/tree"
+  cp -r "$ROOT/install.sh" "$ROOT/lib" "$ROOT/src" "$ROOT/gen" "$DATA_DIR/tree/"
+  printf '#!/bin/sh\nexec sh "%s/tree/install.sh" "$@"\n' "$DATA_DIR" > "$DATA_DIR/install.sh"
+  chmod 755 "$DATA_DIR/install.sh"
 }
 
 do_install() {
   banner
+  roadmap "Packages" "Nerd Font" "Reset old setup" "Write files" "Header art" "Terminal look" "Shell hooks" "Art cache" "Done"
   [[ $(id -u) -eq 0 && -z ${SUDO_USER:-} && ${TERMFX_ALLOW_ROOT:-0} != 1 ]] && warn "running as root: everything will be installed for root's HOME ($HOME)"
   have python3 || [[ $DO_PKGS == 1 ]] || die "python3 is required (re-run without --no-packages)"
 
   step "Installing packages (fastfetch, starship, eza, bat, fzf)"
-  if ((DO_PKGS)); then install_packages; ensure_basics; else info "skipped (--no-packages)"; detect_system; mkdir -p "$BIN_DIR"; have python3 || die "python3 is required"; fi
+  if ((DO_PKGS)); then install_packages; ensure_basics; else item skip "packages" "skipped (--no-packages)"; detect_system; mkdir -p "$BIN_DIR"; have python3 || die "python3 is required"; fi
 
   step "Nerd Font"
-  if [[ $DO_FONT == 0 ]]; then info "skipped (--no-font)"
+  if [[ $DO_FONT == 0 ]]; then item skip "font" "skipped (--no-font)"
   elif [[ $DO_FONT == 1 ]]; then install_font || warn "font setup failed; continuing with icons disabled until a Nerd Font v3+ is selected"
   elif ((DO_PKGS)); then install_font || warn "font setup failed; continuing with icons disabled until a Nerd Font v3+ is selected"
-  else info "skipped (--no-packages; pass --font to force)"; fi
+  else item skip "font" "skipped (--no-packages; pass --font to force)"; fi
 
   step "Resetting old terminal customizations"
-  if ((RESET)); then reset_to_defaults; else info "skipped (--keep-old)"; fi
+  if ((RESET)); then reset_to_defaults; else item skip "reset" "skipped (--keep-old)"; fi
 
   step "Writing termfx files"
   mkdir -p "$BIN_DIR" "$CONF_DIR" "$ART_DIR" "$DATA_DIR" "$CACHE_DIR"
-  write_engine; write_cli; ok "engine + CLI -> $BIN_DIR"
-  write_init_zsh; write_init_bash; ok "shell integrations (zsh, bash)"
-  write_art; ok "built-in art -> $ART_DIR"
-  write_default_config; write_generated_configs; ok "config, starship + fastfetch themes -> $CONF_DIR"
+  write_engine; write_cli; item ok "program" "engine + CLI -> ${BIN_DIR/#$HOME/~}"
+  write_init_zsh; write_init_bash; item ok "shell scripts" "zsh + bash integrations"
+  write_art; item ok "built-in art" "${ART_DIR/#$HOME/~}"
+  write_default_config; write_generated_configs; item ok "themes" "starship + fastfetch -> ${CONF_DIR/#$HOME/~}"
   keep_installer_copy
-  python3 -m compileall -q "$BIN_DIR/termfx_engine" 2>/dev/null && ok "engine compiles" || die "engine failed to compile"
+  python3 -m compileall -q "$BIN_DIR/termfx_engine" 2>/dev/null && item ok "self-check" "engine compiles" || die "engine failed to compile"
   export PATH="$BIN_DIR:$PATH"
 
   step "Your ASCII art"
@@ -206,8 +186,8 @@ do_install() {
   integrate_shells
 
   step "Pre-computing art cache"
-  if [[ -t 1 ]]; then "$BIN_DIR/termfx-engine" prepare 2>/dev/null && ok "cached (large art is scaled once, then loads instantly)" || true
-  else info "will be cached on first start"; fi
+  if [[ -t 1 ]]; then "$BIN_DIR/termfx-engine" prepare 2>/dev/null && item ok "art cache" "large art is scaled once, then loads instantly" || true
+  else item skip "art cache" "will be built on first start"; fi
 
   activate_font
 
@@ -233,7 +213,7 @@ do_uninstall() {
   rm -f "$BIN_DIR/termfx" "$BIN_DIR/termfx-engine" "$BIN_DIR/termfx-themes"; rm -rf "$BIN_DIR/termfx.d" "$BIN_DIR/termfx_engine" "$CACHE_DIR"
   rm -f "$CONF_DIR/init.zsh" "$CONF_DIR/init.bash"
   if ((PURGE)); then rm -rf "$CONF_DIR"; ok "config and art deleted"; else info "kept your config/art in $CONF_DIR (use --purge to delete)"; fi
-  printf '\x1b[r' 2>/dev/null || true
+  printf '\x1b7\x1b[r\x1b8' 2>/dev/null || true
   if [[ -f $BACKUP_ROOT/original/MANIFEST || -f $BACKUP_ROOT/latest/MANIFEST ]]; then
     local a; a=$(ask "  Restore the terminal setup you had before termfx? [y/N]: " "n")
     [[ $a =~ ^[Yy] ]] && restore_backup

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 cmd_art() {
   local sub=${1:-list}; shift || true
   case $sub in
@@ -21,7 +22,7 @@ cmd_art() {
           say "${B}Paste your ASCII art now.${Z} ${D}Finish with Ctrl-D on an empty line. (Huge art? use: termfx art edit $n)${Z}"
         fi
         cat > "$f"
-      elif [[ $src =~ ^https?:// ]]; then fetch "$src" > "$f" || die "download failed"
+      elif [[ $src =~ ^https?:// ]]; then fetch "$src" > "$f" || { rm -f "$f"; die "download failed"; }
       else [[ -f $src ]] || die "no such file: $src"; cp -- "$src" "$f"; fi
       finish_art "$f" "$n" "$use" ;;
     edit)
@@ -33,9 +34,13 @@ cmd_art() {
       say "use it with: termfx art use $n" ;;
     use)
       local n=${1:?usage: termfx art use NAME}
-      if [[ $n =~ ^[0-9]+$ ]]; then local nn; nn=$(ls "$ART_DIR"/*.txt 2>/dev/null | sed -n "${n}p"); [[ -n $nn ]] || die "no art number $n (termfx art list)"; n=${nn##*/}; n=${n%.txt}; fi
+      if [[ $n =~ ^[0-9]+$ ]]; then
+        local -a arts=(); shopt -s nullglob; arts=("$ART_DIR"/*.txt); shopt -u nullglob
+        [[ -n ${arts[n-1]:-} ]] || die "no art number $n (termfx art list)"
+        n=${arts[n-1]##*/}; n=${n%.txt}
+      fi
       [[ $n == random || -f $n || -f $(art_file "$n") ]] || die "unknown art '$n' (termfx art list)"
-      cfg_set art "$n"; "$ENGINE" prepare 2>/dev/null; ok "art = $n"; reload ;;
+      change art "$n"; "$ENGINE" prepare 2>/dev/null; reload ;;
     show) cat -- "$(art_file "${1:?name}")" ;;
     rm|remove|delete)
       local n=${1:?name} f cur next=girl alt an
@@ -56,7 +61,7 @@ cmd_art() {
     image)
       local n=${1:?usage: termfx art image NAME FILE|URL [WIDTH]} src=${2:?file or url} w=${3:-80} f tmp=""
       f=$(art_file "$n"); mkdir -p "$ART_DIR"
-      if [[ $src =~ ^https?:// ]]; then tmp=$(mktemp); fetch "$src" > "$tmp" || die "download failed"; src=$tmp; fi
+      if [[ $src =~ ^https?:// ]]; then tmp=$(mktemp); fetch "$src" > "$tmp" || { rm -f "$tmp"; die "download failed"; }; src=$tmp; fi
       if have chafa; then chafa --format symbols --symbols braille --colors none --size "${w}x$((w/2))" --animate off "$src" > "$f"
       elif have jp2a; then jp2a --width="$w" "$src" > "$f"
       else die "install chafa (recommended) or jp2a first"; fi
@@ -73,7 +78,7 @@ cmd_art() {
       "$ENGINE" distro-logo "${1:-}" > "$f" 2>/dev/null || { rm -f "$f"; die "could not extract a logo (needs fastfetch); paste your own: termfx art add NAME"; }
       finish_art "$f" "$n" 1 ;;
     info) "$ENGINE" art-info "${1:-}" ;;
-    *) die "unknown: termfx art $sub  (try: termfx --help)" ;;
+    *) # "termfx art NAME" or "termfx art 3" = use it, same as every other setting
+      if [[ $sub =~ ^[0-9]+$ || -f $(art_file "$sub") ]]; then cmd_art use "$sub"; else die "unknown: termfx art $sub  (termfx help art)"; fi ;;
   esac
 }
-

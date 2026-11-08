@@ -1,6 +1,5 @@
-from ._shared import (
-    PALETTES, os, re,
-)
+import os, re
+from ._shared import PALETTES
 
 def hex_rgb(h):
     h = h.strip().lstrip("#")

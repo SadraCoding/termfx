@@ -1,6 +1,4 @@
-from ._shared import (
-    math, random,
-)
+import math, random
 
 def tri(x):
     x %= 1.0
@@ -21,7 +19,7 @@ class Fx:
             self.off = [rnd.uniform(0, self.H + 16) for _ in range(n)]
             self.trl = [rnd.randint(max(3, self.H // 4), max(5, self.H)) for _ in range(n)]
             self.hue = [rnd.random() for _ in range(n)]
-        if name in ("comet", "shatter"):
+        if name == "comet":
             self.comets = [(rnd.uniform(0, 1), rnd.uniform(0.4, 1.4), rnd.uniform(0, 1)) for _ in range(8)]
         if name == "metaballs":
             self.balls = [(rnd.uniform(0.2, 0.8), rnd.uniform(0.2, 0.8), rnd.uniform(0.08, 0.18),

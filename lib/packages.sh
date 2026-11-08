@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lib/packages.sh - distro detection, package install, user-space fallbacks, font
 # =============================================================================
 DISTRO_ID=unknown; DISTRO_LIKE=""; DISTRO_NAME="Linux"; PM=""; SUDO=""; NO_PRIV=0
@@ -68,9 +69,10 @@ pm_install() { # one package at a time so a missing one never aborts the rest
 try_pkg() { # logical-name
   local p; p=$(pkg_name "$1")
   [[ -n $p ]] || return 1
-  info "installing ${CB}$p${C0} via $PM"
-  if pm_install "$p" >/dev/null 2>&1; then ok "$p"; return 0; fi
-  warn "$p is not available via $PM"; return 1
+  # make sure sudo is unlocked *before* the spinner starts, so a password prompt is never hidden
+  if [[ -n $SUDO ]] && ! $SUDO -n true 2>/dev/null; then $SUDO -v || return 1; fi
+  if spin "installing $p via $PM" pm_install "$p"; then item ok "$p" "installed via $PM"; return 0; fi
+  item warn "$p" "not available via $PM"; return 1
 }
 
 fetch() { # url dest
@@ -154,23 +156,23 @@ fallback_fzf() {
 
 ensure_tool() { # command logical [fallback-fn]
   local cmd=$1 logical=$2 fb=${3:-}
-  have "$cmd" && { ok "$cmd already installed"; return 0; }
-  [[ -x $BIN_DIR/$cmd ]] && { ok "$cmd (user install)"; return 0; }
+  have "$cmd" && { item ok "$cmd" "already installed"; return 0; }
+  [[ -x $BIN_DIR/$cmd ]] && { item ok "$cmd" "found in $BIN_DIR"; return 0; }
   if [[ -n $PM && $NO_PRIV == 0 ]]; then try_pkg "$logical" && have "$cmd" && return 0; fi
   if [[ -n $fb ]]; then
-    info "trying user-space install of $cmd"
-    if "$fb"; then ok "$cmd installed to $BIN_DIR"; return 0; fi
+    if spin "downloading $cmd to $BIN_DIR" "$fb"; then item ok "$cmd" "installed to $BIN_DIR"; return 0; fi
   fi
-  warn "$cmd not installed - termfx will fall back gracefully"
+  item warn "$cmd" "not installed - termfx will fall back gracefully"
   return 1
 }
 
 install_packages() {
   detect_system
-  info "system: ${CB}$DISTRO_NAME${C0} (id=$DISTRO_ID${DISTRO_LIKE:+, like=$DISTRO_LIKE})  package manager: ${CB}${PM:-none}${C0}"
+  item info "system" "$DISTRO_NAME${DISTRO_LIKE:+ (like $DISTRO_LIKE)}"
+  item info "pkg manager" "${PM:-none found}"
   [[ $(uname -s) == Linux ]] || warn "non-Linux system detected - best effort only"
   if [[ -n $PM && $NO_PRIV == 1 ]]; then warn "no root/sudo/doas: system packages skipped, using user-space installs"; fi
-  if [[ -n $PM && $NO_PRIV == 0 && -n $SUDO ]]; then info "sudo may ask for your password"; $SUDO -v 2>/dev/null || true; fi
+  if [[ -n $PM && $NO_PRIV == 0 && -n $SUDO ]]; then item info "sudo" "may ask for your password once"; $SUDO -v 2>/dev/null || true; fi
   [[ -n $PM && $NO_PRIV == 0 ]] && pm_refresh
   mkdir -p "$BIN_DIR"
   ensure_tool python3 python || die "python3 is required"
@@ -192,9 +194,8 @@ install_font() {
   if [[ ${DO_PKGS:-1} == 1 && -n $PM && $NO_PRIV == 0 && -n $(pkg_name font) ]]; then
     try_pkg font && font_has_v3_glyphs && { ok "Nerd Font v3+ icon glyphs verified"; return 0; }
   fi
-  info "downloading JetBrainsMono Nerd Font (user fonts)"
   local tmp; tmp=$(mktemp -d)
-  if fetch "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "$tmp/f.txz" \
+  if spin "downloading JetBrainsMono Nerd Font" fetch "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "$tmp/f.txz" \
       && tar -tJf "$tmp/f.txz" >/dev/null 2>&1; then
     mkdir -p "$FONT_DIR"
     if ! tar -xJf "$tmp/f.txz" -C "$FONT_DIR" 2>/dev/null; then

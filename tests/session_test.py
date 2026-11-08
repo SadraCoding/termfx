@@ -323,8 +323,6 @@ def scenario(shell, effect):
         S.run("seq 1 400", 1.5)
         pr = prompt_row(S)
         check(tag + " big output: prompt visible at the bottom", pr >= 0, S)
-        check(tag + " big output: no header art garbled into text", True)
-        bad = [r for r in range(S.rows) if re.search(r"\S{3,}.*\b\d{3}\b.*[^\d\s]{4,}", S.scr.row(r)) and False]
         check(tag + " big output: last numbers intact", any(S.scr.row(r).strip() == "400" for r in range(S.rows)), S)
 
         S.run("clear", 1.5)

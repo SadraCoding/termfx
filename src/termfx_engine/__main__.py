@@ -1,5 +1,6 @@
-from ._commands import main
 import sys
+
+from ._commands import main
 
 try:
     sys.exit(main(sys.argv))

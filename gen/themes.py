@@ -59,6 +59,30 @@ STARSHIP_MODULE_PRESETS = {
     "server": "username hostname localip shlvl directory git_branch git_status docker_context aws azure gcloud kubernetes cmd_duration jobs sudo status time shell".split(),
     "full": STARSHIP_MODULES,
 }
+
+# Modules that only exist in newer Starship releases. Used as a safe fallback when the
+# installed starship cannot be queried (otherwise it warns "Unknown key" for them).
+STARSHIP_NEWER_MODULES = set("cpp cobol daml fennel fortran gleam haxe mojo nats odin opa pixi quarto raku "
+                             "solidity typst xmake buf guix_shell fossil_branch fossil_metrics pijul_channel "
+                             "hg_state netns mise singularity meson spack".split())
+_SUPPORTED = None
+def supported_starship_modules():
+    """Modules the *installed* starship knows (`starship module --list`); None if unknown."""
+    global _SUPPORTED
+    if _SUPPORTED is not None: return _SUPPORTED or None
+    _SUPPORTED = set()
+    try:
+        import subprocess, shutil
+        exe = shutil.which("starship")
+        if exe:
+            out = subprocess.run([exe, "module", "--list"], capture_output=True, text=True, timeout=5).stdout
+            _SUPPORTED = {l.strip() for l in out.splitlines() if re.fullmatch(r"\s+[a-z0-9_]+", l)}
+    except Exception:
+        _SUPPORTED = set()
+    return _SUPPORTED or None
+def starship_module_ok(name):
+    sup = supported_starship_modules()
+    return name in sup if sup else name not in STARSHIP_NEWER_MODULES
 STARSHIP_THEMES = {
     "terminal-match": ("Terminal Match", "", "", "balanced"),
     "catppuccin-mocha": ("Catppuccin Mocha", "catppuccin", "pills", "balanced"),
@@ -154,6 +178,9 @@ def main():
             for k, v in FETCH_PRESETS.items():
                 print("%-13s %s" % (k, v["desc"]))
         return
+    if len(sys.argv) > 1 and sys.argv[1] == "--starship-unsupported":
+        print(" ".join(m for m in STARSHIP_MODULES if not starship_module_ok(m)))
+        return
     if len(sys.argv) > 2 and sys.argv[1] == "--starship-modules":
         profile = STARSHIP_THEMES.get(sys.argv[2])
         if profile:
@@ -230,7 +257,7 @@ def write_fastfetch(P, info, cf):
     mods += [row(n) for n in names]
     if boxed: mods.append(border("├" + "─" * w + "┤", "mauve"))
     if info != "minimal":
-        mods.append({"type": "colors", "key": key("colors") if info != "clean" else key("colors"),
+        mods.append({"type": "colors", "key": key("colors"),
                      "keyColor": col("blue"), "symbol": "circle"})
     if boxed: mods.append(border("╰" + "─" * w + "╯", "pink"))
     cfg = {"$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
@@ -264,7 +291,7 @@ def write_starship(P, style, char, lines, clock, tfmt, path, plain, cf):
     if glyphless: ok, er = "[>](bold %s)" % P["green"], "[>](bold %s)" % P["red"]
     two = lines == 2 and style not in ("minimal", "plain")
     selected = (cf.get("starship_modules") or " ".join(DEFAULT_STARSHIP_MODULES)).replace(",", " ").split()
-    modules = set() if selected == ["none"] else set(selected)
+    modules = set() if selected == ["none"] else {m for m in selected if starship_module_ok(m) or m in DEFAULT_STARSHIP_MODULES}
     if plain:
         order = "username hostname directory git_branch git_status cmd_duration status".split()
         order += [m for m in STARSHIP_MODULES if m in modules and m not in DEFAULT_STARSHIP_MODULES]
@@ -330,14 +357,12 @@ def write_starship(P, style, char, lines, clock, tfmt, path, plain, cf):
         t += "[docker_context]\nformat = '%s'\n\n" % seg(P["sky"], "$context")
     t += "[cmd_duration]\nmin_time = %d\nformat = '%s'\n\n" % (number("starship_duration_min", "2000", 0, 600000), seg(P["yellow"], I(0xf051f) + (" " if not plain else "took ") + "$duration"))
     t += "[status]\ndisabled = false\nformat = '%s'\n\n" % seg(P["red"], I(0xf00d) + (" " if not plain else "exit ") + "$status")
-    t += "[fill]\nsymbol = '%s'\nstyle = '%s'\n\n" % ("·" if not glyphless else ".", dim)
+    fill = re.sub(r"['\n\r]", "", cf.get("starship_fill_symbol") or ("·" if not glyphless else "."))
+    t += "[fill]\nsymbol = %s\nstyle = '%s'\n\n" % (quoted(fill), dim)
     tl = seg(P["pink"], I(0xf017) + (" " if not plain else "") + "$time", trail="")
     safe_tfmt = re.sub(r"['\n\r]", "", cf.get("starship_time_format") or tfmt)
     t += "[time]\ndisabled = %s\ntime_format = %s\nformat = '%s'\n\n" % (str(not right_clock).lower(), quoted(safe_tfmt), tl)
     t += "[character]\nsuccess_symbol = '%s'\nerror_symbol = '%s'\n" % (ok, er)
-    fill = re.sub(r"['\n\r]", "", cf.get("starship_fill_symbol") or ("·" if not glyphless else "."))
-    t = t.replace("symbol = '%s'\nstyle = '%s'\n\n" % ("·" if not glyphless else ".", dim),
-                  "symbol = %s\nstyle = '%s'\n\n" % (quoted(fill), dim))
     for m in order:
         if m in modules and m not in DEFAULT_STARSHIP_MODULES and m not in ("fill", "character"):
             t += "[%s]\ndisabled = false\n\n" % m
@@ -362,4 +387,5 @@ def write_terms(P):
                 "initial_window_width 120c\ninitial_window_height 40c\n" % (P["dark"], P["text"]))
         for i, c in enumerate(pal): f.write("color%d %s\n" % (i, c))
 
-main()
+if __name__ == "__main__":
+    main()

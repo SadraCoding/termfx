@@ -1,22 +1,35 @@
 """termfx-engine - animated terminal header (ASCII art + live effects + sysinfo).
 
 Commands:  height | run FLAG PARENT | preview [SECS] | prepare | art-info [NAME]
-           list effects|palettes|art|info-items | distro-logo [NAME] | info | doctor | version
+           list effects|palettes|art | distro-logo [NAME] | info | doctor | version
            effect-info [NAME] | palette-show [NAME]
 Options:   --set key=value (repeatable)
 """
 
+import errno
+import glob
+import os
+import random
+import select
+import shutil
+import signal
+import sys
+import time
 from ._shared import (
-    ANSI_RE, ART_DIR, CACHE_DIR, CONF_FILE, EFFECTS,
-    EFFECT_DESC, EFFECT_PALETTE, OFF_NAMES, OVERRIDES, PALETTES,
-    UTF8, VERSION, errno, glob, os,
-    random, re, select, shutil, signal,
-    sys, time,
+    ANSI_RE,
+    ART_DIR,
+    CACHE_DIR,
+    CONF_FILE,
+    EFFECTS,
+    EFFECT_DESC,
+    EFFECT_PALETTE,
+    OFF_NAMES,
+    OVERRIDES,
+    PALETTES,
+    UTF8,
+    VERSION,
 )
-from ._system import (
-    Out, alive, as_bool, as_float, as_int,
-    load_config, log_error, term_size,
-)
+from ._system import Out, alive, as_bool, as_float, cfg_int, load_config, log_error, term_size
 from ._color import (
     COLORS, build_lut, hex_rgb, palette_stops, truecolor_on,
 )
@@ -50,7 +63,7 @@ def hide_header(out, height):
         out.write("\x1b[2K")
         if row + 1 < height:
             out.write("\x1b[1B")
-    out.write("\x1b8\x1b[r")
+    out.write("\x1b8")
 
 def cmd_run(flag, parent):
     out = Out()
@@ -108,7 +121,7 @@ def cmd_run(flag, parent):
                     last_rotate = t0
                 # auto-rotate effects/palettes
                 if as_bool(cfg.get("rotate", "false")) and cfg["effect"].strip().lower() not in OFF_NAMES:
-                    interval = max(30, as_int(cfg.get("rotate_interval", "300"), 300))
+                    interval = max(30, cfg_int(cfg, "rotate_interval"))
                     if time.time() - last_rotate >= interval:
                         pool = [e for e in EFFECTS if e != "random"]
                         cfg["effect"] = random.choice(pool)
@@ -122,7 +135,7 @@ def cmd_run(flag, parent):
                     new = build_layout(cfg, size[0], size[1])
                     if new is None:
                         if region_H:
-                            out.write("\x1b[r")
+                            out.write("\x1b7\x1b[r\x1b8")
                             region_H = 0
                         rend = None
                         write_state(flag, 0, parent)
@@ -164,7 +177,7 @@ def cmd_run(flag, parent):
                 drawn = True
                 if rend.static:
                     continue
-                dt = 1.0 / max(2, min(60, as_int(cfg["fps"], 16))) - (time.time() - t1)
+                dt = 1.0 / max(2, min(60, cfg_int(cfg, "fps"))) - (time.time() - t1)
                 time.sleep(max(0.01, dt))
             except OSError as e:
                 if e.errno in (errno.EIO, errno.EBADF, errno.ENXIO):
@@ -180,7 +193,7 @@ def cmd_run(flag, parent):
         except OSError:
             pass
         try:
-            out.write("\x1b[r")
+            out.write("\x1b7\x1b[r\x1b8")
         except Exception:
             pass
     return 0
@@ -214,7 +227,7 @@ def cmd_preview(cfg, secs):
         fdin = None
     out.write("\x1b[?1049h\x1b[?25l\x1b[2J")
     t0 = time.time()
-    fps = max(2, min(60, as_int(cfg["fps"], 16)))
+    fps = max(2, min(60, cfg_int(cfg, "fps")))
     hint = "art: %s   effect: %s   palette: %s   -   press any key to exit" % (
         os.path.basename(lay.path or "builtin"), rend.effect_name, cfg["palette"])
     try:
@@ -294,7 +307,7 @@ def cmd_doctor(cfg):
                 lay.H, lay.aw, lay.ah, len(lay.frames), len(lay.info)))
         elif not as_bool(cfg["enabled"]):
             print("header     : disabled (run: termfx on)")
-        elif cols < as_int(cfg["min_cols"], 80) or rows < as_int(cfg["min_rows"], 24):
+        elif cols < cfg_int(cfg, "min_cols") or rows < cfg_int(cfg, "min_rows"):
             print("header     : hidden - resize terminal to at least %sx%s (now %dx%d)" % (
                 cfg["min_cols"], cfg["min_rows"], cols, rows))
             print("tip        : or lower the bar with  termfx set min_cols 60  &&  termfx set min_rows 20")
@@ -308,10 +321,6 @@ def cmd_doctor(cfg):
 def cmd_effect_info(name):
     """Show detailed info about a specific effect."""
     name = (name or "").strip().lower()
-    if not name or name == "list":
-        for e in EFFECTS:
-            print("%-14s %s" % (e, EFFECT_DESC.get(e, "")))
-        return 0
     if name in OFF_NAMES:
         print("name      : off")
         print("desc      : no effect - still art in plain colour, nothing animates")
@@ -373,42 +382,6 @@ def cmd_palette_catalog():
         print("%-*s %d  %s" % (w, name, len(stops), " ".join("#" + s for s in stops)))
     return 0
 
-def cmd_info_items():
-    """List available info panel items and their status."""
-    items = [
-        ("user", "Username", "builtin"),
-        ("hostname", "Hostname", "builtin"),
-        ("os", "Operating System", "builtin"),
-        ("kernel", "Kernel version", "builtin"),
-        ("uptime", "System uptime", "builtin"),
-        ("shell", "Active shell", "builtin"),
-        ("terminal", "Terminal emulator", "builtin"),
-        ("desktop", "Desktop environment", "builtin"),
-        ("cpu", "CPU model", "builtin"),
-        ("memory", "RAM usage", "builtin"),
-        ("disk", "Disk usage", "fastfetch"),
-        ("gpu", "GPU info", "fastfetch"),
-        ("packages", "Installed packages", "fastfetch"),
-        ("wm", "Window manager", "fastfetch"),
-        ("theme", "GTK/Qt theme", "fastfetch"),
-        ("icons", "Icon theme", "fastfetch"),
-        ("font", "Default font", "fastfetch"),
-        ("battery", "Battery status", "fastfetch"),
-        ("local_ip", "Local IP", "fastfetch"),
-        ("public_ip", "Public IP", "fastfetch"),
-        ("date", "Current date/time", "fastfetch"),
-        ("music", "Currently playing", "fastfetch"),
-        ("weather", "Weather (custom cmd)", "custom"),
-        ("custom", "User-defined command output", "custom"),
-    ]
-    print("%-12s %-26s %s" % ("ITEM", "DESCRIPTION", "SOURCE"))
-    print("-" * 62)
-    for name, desc, src in items:
-        print("%-12s %-26s %s" % (name, desc, src))
-    print()
-    print("Configure: termfx info-rows item1,item2,... | termfx set info_cmd 'your-cmd'")
-    return 0
-
 def main(argv):
     args = argv[1:]
     while args and args[0].startswith("--"):
@@ -459,8 +432,6 @@ def main(argv):
             return cmd_palette_catalog()
         elif what == "art":
             print("\n".join(sorted(os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(ART_DIR, "*.txt")))))
-        elif what == "info-items":
-            return cmd_info_items()
         return 0
     if cmd == "menu":
         return run_menu(args[0] if args else "effects", cfg)

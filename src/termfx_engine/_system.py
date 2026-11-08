@@ -1,6 +1,9 @@
+import os, re, select, shutil, time, traceback
 from ._shared import (
-    CACHE_DIR, CONF_FILE, DEFAULTS, OVERRIDES, os,
-    re, select, shutil, time, traceback,
+    CACHE_DIR,
+    CONF_FILE,
+    DEFAULTS,
+    OVERRIDES,
 )
 
 _TTY_FD = None
@@ -27,6 +30,10 @@ def as_float(v, d):
         return float(str(v).strip())
     except Exception:
         return d
+
+def cfg_int(cfg, key):
+    """Integer config value; a malformed value falls back to the built-in default."""
+    return as_int(cfg.get(key, DEFAULTS.get(key, "0")), as_int(DEFAULTS.get(key, "0"), 0))
 
 def load_config():
     cfg = dict(DEFAULTS)

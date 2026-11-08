@@ -1,7 +1,5 @@
-from ._shared import (
-    CACHE_DIR, CONF_DIR, EFFECT_PALETTE, json, os,
-    shutil, subprocess, time,
-)
+import json, os, shutil, subprocess, time
+from ._shared import CACHE_DIR, CONF_DIR, EFFECT_PALETTE
 from ._color import (
     build_lut, palette_stops,
 )
@@ -117,7 +115,15 @@ def get_info(cfg):
     mode = cfg["info"].strip().lower()
     if mode in ("off", "none", "false", "0", "no"):
         return []
-    sig = "%s|%s|%s|%s" % (mode, cfg["info_cmd"], cfg["info_config"], os.environ.get("TERMFX_SEED", ""))
+    ic = cfg["info_config"]
+    if ic == "auto":
+        ic = os.path.join(CONF_DIR, "fastfetch.jsonc")
+    ic = os.path.expanduser(ic) if ic else ""
+    try:
+        stamp = os.stat(ic).st_mtime_ns if ic else 0
+    except OSError:
+        stamp = 0
+    sig = "%s|%s|%s|%s|%s" % (mode, cfg["info_cmd"], ic, stamp, os.environ.get("TERMFX_SEED", ""))
     cp = os.path.join(CACHE_DIR, "info.json")
     try:
         with open(cp, encoding="utf-8") as fh:
@@ -132,11 +138,8 @@ def get_info(cfg):
         lines = _run(cmd, shell=True)
     elif mode in ("auto", "fastfetch") and shutil.which("fastfetch"):
         argv = ["fastfetch", "--logo", "none", "--pipe", "false"]
-        ic = cfg["info_config"]
-        if ic == "auto":
-            ic = os.path.join(CONF_DIR, "fastfetch.jsonc")
-        if ic and os.path.isfile(os.path.expanduser(ic)):
-            argv += ["--config", os.path.expanduser(ic)]
+        if ic and os.path.isfile(ic):
+            argv += ["--config", ic]
         lines = _run(argv)
     elif mode in ("auto", "neofetch") and shutil.which("neofetch"):
         lines = _run(["neofetch", "--off"])

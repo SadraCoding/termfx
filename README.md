@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="media/border.png" alt="termfx border" width="100%">
-</p>
-
 # termfx
 
 **An animated ASCII header for your terminal, plus a modern shell look.** Every time you open a terminal you get a living picture (aurora, fire, matrix rain, 70+ more) next to a panel with your system info, and a good-looking prompt underneath. Works in **Bash and Zsh on Linux**. The animation engine needs only Python 3's standard library: no downloads, no GPU.
@@ -25,11 +21,11 @@ The terminal is the black window where you type commands (Terminal, Konsole, GNO
 
 ## Step 1: Install it
 
-1. Download **`termfx-install.sh`** (from the project's `dist/` folder or release page) into your Downloads folder.
-2. Open a terminal in that folder and run:
+1. Download and unzip the **`termfx`** folder (for example into your Downloads folder).
+2. Open a terminal inside that folder and run:
 
 ```sh
-sh termfx-install.sh
+./install.sh
 ```
 
 3. The installer asks a few questions. You can just press **Enter** for each one to accept the default, or pick from the menus:
@@ -40,11 +36,28 @@ sh termfx-install.sh
 4. It may ask for your password (to install helper programs like Fastfetch and Starship). That is normal. All of them are optional.
 5. **Close the terminal and open a new one.** Your header appears.
 
-Want it fully automatic? `sh termfx-install.sh -y` accepts every default and asks nothing.
+Want it fully automatic? `./install.sh -y` accepts every default and asks nothing.
 
 > Do not pipe the installer into a shell (`curl ... | sh`). Save the file first, then run it.
 
 > Your old setup is **backed up automatically**. You can get it back any time with `termfx restore`.
+
+## How every command works
+
+There is one pattern. Learn it once and you know all of termfx:
+
+| You type | What happens |
+|---|---|
+| `termfx effect` | shows the current value and how to change it (nothing is changed) |
+| `termfx effect vortex` | changes it and tells you exactly what changed: `effect: aurora → vortex` |
+| `termfx effect list` | browse the choices; pick by name or by number |
+| `termfx effect next` / `prev` | cycle through the choices (effect, palette) |
+| `termfx glitch on` / `off` | switch something on or off |
+| `termfx undo` | put your settings back the way they were before the last change |
+| `termfx status` | every setting, where each file lives, how to change each one |
+| `termfx help` | this pattern and all settings on one screen; `termfx help art` for details |
+
+Typo? termfx suggests the command you probably meant. The old spellings (`info-style`, `char`, `clock`, ...) still work.
 
 ## Step 2: Nothing showing?
 
@@ -132,7 +145,7 @@ Every setting is reachable with `termfx set NAME VALUE` (see the [config key lis
 
 ```sh
 termfx info off               # hide the panel   (termfx info on  brings it back)
-termfx fastfetch list         # 12 ready-made panel designs
+termfx fastfetch list         # 11 ready-made panel designs
 termfx fastfetch gamer        # choose one
 termfx info-style list        # frame style: boxed, clean, compact, minimal
 termfx info-colors list       # colours of the panel text
@@ -167,7 +180,7 @@ termfx randomize               # a surprise: random effect + colours + art
 termfx profile load night      # go back to your saved look
 termfx profile list
 termfx export mylook.json      # a file you can share with a friend ...
-termfx import mylook.json      # ... who loads it with this
+termfx import mylook.json      # ... who loads it with this (command-running keys are skipped)
 ```
 
 ## Step 10: Daily life with termfx
@@ -271,7 +284,7 @@ Animated art: put a line `---FRAME---` between frames.
 |---|---|
 | `termfx info on\|off` | show or hide the panel |
 | `termfx info status` | current panel settings |
-| `termfx info items` | list available info lines |
+| `termfx info items` | list the info lines you can choose from |
 | `termfx info refresh` | clear the cache, re-read system info |
 | `termfx info custom "CMD"` | show the output of any command |
 | `termfx fastfetch list` / `NAME` / `preview NAME` | choose a Fastfetch panel design: `classic compact minimal clean full gamer server developer aesthetic hybridfetch ultra` |
@@ -310,7 +323,7 @@ Animated art: put a line `---FRAME---` between frames.
 | `termfx profile load NAME` | apply a saved profile |
 | `termfx profile list` / `rm NAME` | list / delete profiles |
 | `termfx export [FILE]` | export config as JSON (to the screen, or a file) |
-| `termfx import FILE` | import a JSON config |
+| `termfx import FILE [--trust]` | import a JSON config. `info_cmd` and `info_config` can run commands, so they are skipped unless you pass `--trust` (only for files you wrote yourself) |
 
 ## Control, config and diagnostics
 
@@ -344,7 +357,7 @@ Set with `termfx set KEY VALUE`, read with `termfx get KEY`, or edit the file wi
 | `speed` | `1.0` | animation speed multiplier |
 | `fps` | `20` | frames per second, 2..60 (lower = less CPU) |
 | `intensity` | `1.0` | brightness, 0.3..2.5 |
-| `info` | `fastfetch` | `fastfetch` \| `auto` \| `builtin` \| `off` |
+| `info` | `auto` | `auto` (Fastfetch, else neofetch, else built-in) \| `fastfetch` \| `builtin` \| `off` |
 | `fetch_preset` | `classic` | Fastfetch panel design |
 | `info_config` | `auto` | `auto` or a path to your own Fastfetch JSONC |
 | `info_rows` | (preset) | comma-separated lines to show |
@@ -423,15 +436,15 @@ No effect assets or other runtime dependencies are fetched. Package names differ
 ## Install (all options)
 
 ```sh
-sh termfx-install.sh --help
-sh termfx-install.sh -y                         # accept installer prompts
-sh termfx-install.sh --keep-old                 # keep existing terminal customizations
-sh termfx-install.sh --no-packages              # skip package installation (Python 3 is still required)
-sh termfx-install.sh --no-font                  # skip the optional font
-sh termfx-install.sh --effect starfield --palette photon
-sh termfx-install.sh --shell bash               # install shell integration for Bash
-sh termfx-install.sh --art-url URL --art-name NAME   # use art from a URL
-sh termfx-install.sh --fetch-preset gamer --starship-theme nord-frost
+./install.sh --help
+./install.sh -y                         # accept installer prompts
+./install.sh --keep-old                 # keep existing terminal customizations
+./install.sh --no-packages              # skip package installation (Python 3 is still required)
+./install.sh --no-font                  # skip the optional font
+./install.sh --effect starfield --palette photon
+./install.sh --shell bash               # install shell integration for Bash
+./install.sh --art-url URL --art-name NAME   # use art from a URL
+./install.sh --fetch-preset gamer --starship-theme nord-frost
 ```
 
 The normal install backs up supported shell and terminal customizations before applying its selected setup. Use `termfx restore` to restore the backup. Open a new terminal after installation.
@@ -445,10 +458,19 @@ src/                       shell CLI, engine, default config, art, Bash/Zsh inte
 src/termfx_engine/          modular Python engine: effects, colour, layout and rendering
 src/termfx.d/               CLI command modules
 gen/themes.py               theme file generator
-build.sh                    builds the single-file dist/termfx-install.sh artifact
 tests/smoke.sh              installer lifecycle smoke test
 tests/layout_test.py        art / info panel layout regression test
 tests/session_test.py       real-shell test: header, prompt and output never overlap (clear, Ctrl-L, big output, resize)
+tests/overlap_test.py       real-shell test: typing while animating, wrapped lines, 2-line prompts, scrolled output, silent terminals
 ```
 
-Run `make test` to run every test. Run `make build` after source changes to regenerate `dist/termfx-install.sh`. The smoke test uses `--no-packages`; it checks installer lifecycle but does not verify downloads or repository package availability on each distribution. For release validation, test package installation separately in clean distro environments with network access.
+Run `make test` to run every test . `make syntax` needs no extra tools; `make lint` additionally needs shellcheck. The smoke test uses `--no-packages`; it checks installer lifecycle but does not verify downloads or repository package availability on each distribution. For release validation, test package installation separately in clean distro environments with network access.
+
+## Notes: Starship module compatibility
+
+termfx now asks your installed Starship which modules it supports (`starship module --list`) and
+silently skips the rest when it generates `starship.toml`. This prevents warnings such as
+`Error in 'StarshipRoot' at 'cpp': Unknown key` on older Starship versions. If Starship is not
+installed yet, newer-only modules are skipped as a precaution. After updating Starship, run
+`termfx starship preset developer` (or any `termfx set ...`) to regenerate. `termfx starship module list`
+marks unsupported modules.

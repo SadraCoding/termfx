@@ -1,10 +1,11 @@
+import math, os, random, time
 from ._shared import (
-    EFFECTS, EFFECT_PALETTE, OFF_NAMES, UTF8, math, os,
-    random, time,
+    EFFECTS,
+    EFFECT_PALETTE,
+    OFF_NAMES,
+    UTF8,
 )
-from ._system import (
-    as_bool, as_float, as_int,
-)
+from ._system import as_bool, as_float, cfg_int
 from ._color import (
     build_lut, palette_stops, to256, truecolor_on,
 )
@@ -38,7 +39,7 @@ class Renderer:
         self.sp = max(0.1, as_float(cfg["speed"], 1.0))
         self.fx = Fx(fx, lay.aw + 2, lay.art_rows, self.sp)
         self.effect_name = "off" if self.static else fx
-        self.frame_ms = max(40, as_int(cfg["frame_ms"], 140))
+        self.frame_ms = max(40, cfg_int(cfg, "frame_ms"))
         on = not self.static
         self.stars_on = on and as_bool(cfg["stars"])
         self.glitch_on = on and as_bool(cfg["glitch"])

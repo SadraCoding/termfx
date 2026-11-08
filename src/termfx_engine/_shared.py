@@ -1,14 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""termfx-engine - animated terminal header (ASCII art + live effects + sysinfo).
-
-Commands:  height | run FLAG PARENT | preview [SECS] | prepare | art-info [NAME]
-           list effects|palettes|art|info-items | distro-logo [NAME] | info | doctor | version
-           effect-info [NAME] | palette-show [NAME]
-Options:   --set key=value (repeatable)
-"""
-import errno, glob, hashlib, json, math, os, random, re, select, shutil
-import signal, subprocess, sys, time, traceback, unicodedata
+"""Shared constants for the termfx engine: defaults, effect and palette catalogues, regexes."""
+import os
+import re
 
 VERSION = "2.3.0"
 HOME = os.path.expanduser("~")
@@ -19,7 +11,7 @@ CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, 
 
 DEFAULTS = {
     "enabled": "true", "art": "girl", "effect": "aurora", "palette": "auto",
-    "fps": "20", "speed": "1.0", "max_height": "24", "max_width": "0",
+    "fps": "20", "speed": "1.0", "max_height": "20", "max_width": "0",
     "fit": "auto", "crop": "center", "info": "auto", "info_config": "auto",
     "info_cmd": "", "info_gap": "4", "stars": "true", "glitch": "false",
     "sweep": "true", "intro": "true", "sparkle": "false", "vignette": "false",

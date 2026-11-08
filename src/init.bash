@@ -8,6 +8,7 @@ TFX_UI=true TFX_PROMPT=auto TFX_ICONS=true TFX_NOTIFY=false TFX_NOTIFY_AFTER=10
 [[ -r $TERMFX_HOME/config ]] && eval "$(awk -F= '/^[ \t]*(ui|prompt|icons|notification|notify_after)[ \t]*=/ { k=$1; v=$2; sub(/#.*/,"",v); gsub(/[^A-Za-z0-9_.\/-]/,"",v); gsub(/[ \t]/,"",k); printf "TFX_%s=%s;", toupper(k), v }' "$TERMFX_HOME/config")"
 
 # ---- UI: aliases, fzf, starship
+# shellcheck disable=SC2139  # alias bodies embed the icon flag on purpose, fixed at definition time
 if [[ $TFX_UI != false ]]; then
   if command -v eza >/dev/null 2>&1; then
     _tfx_ic=; [[ $TFX_ICONS == true ]] && _tfx_ic=--icons
@@ -67,7 +68,7 @@ __termfx_cls() {
 }
 clear() { if [[ -n ${TERMFX_FLAG:-} ]]; then __termfx_cls; else command clear "$@"; fi; }
 __termfx_hide_header() {
-  local p h par i
+  local p h par i j
   [[ -n ${TERMFX_FLAG:-} && -r $TERMFX_FLAG.state ]] || return 0
   read -r p h par < "$TERMFX_FLAG.state"
   [[ ${h:-0} =~ ^[0-9]+$ ]] && ((h > 0)) || return 0
@@ -77,7 +78,7 @@ __termfx_hide_header() {
   for ((i=0; i<40; i++)); do
     read -r p h par < "$TERMFX_FLAG.state" 2>/dev/null || break
     if [[ ${h:-0} == 0 ]]; then            # engine is idle: erase the header rows once more so no frame can linger
-      printf '\e7\e[r\e[1;1H'; for ((i=0; i<hh; i++)); do printf '\e[2K'; ((i + 1 < hh)) && printf '\e[1B'; done; printf '\e8'
+      printf '\e7\e[r\e[1;1H'; for ((j=0; j<hh; j++)); do printf '\e[2K'; ((j + 1 < hh)) && printf '\e[1B'; done; printf '\e8'
       return 0
     fi
     sleep 0.025
@@ -89,7 +90,7 @@ __termfx_hide_header() {
     printf '\e[2K'
     ((i + 1 < h)) && printf '\e[1B'
   done
-  printf '\e8\e[r'
+  printf '\e8'
 }
 
 # Where is the cursor?  Sets __TFX_ROW (1-based) or returns 1.
@@ -97,6 +98,7 @@ __termfx_cursor_row() {
   local pos r
   __TFX_ROW=
   printf '\e[6n' >/dev/tty 2>/dev/null || return 1
+  # shellcheck disable=SC2034  # R is the delimiter of the cursor report, not a variable
   IFS= read -rs -t 0.3 -d R pos </dev/tty 2>/dev/null || return 1
   r=${pos##*[}; r=${r%;*}
   [[ $r =~ ^[0-9]+$ ]] || return 1
@@ -146,7 +148,7 @@ __termfx_debug() {
   __TFX_READY=
   __termfx_preexec "$BASH_COMMAND"
 }
-__termfx_exit() { [[ -n ${TERMFX_FLAG:-} ]] && rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"; printf '\e[r'; }
+__termfx_exit() { [[ -n ${TERMFX_FLAG:-} ]] && rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"; printf '\e7\e[r\e8'; }
 __termfx_ctrl_l() { __termfx_cls; }
 
 __termfx_hooks() {
@@ -154,6 +156,7 @@ __termfx_hooks() {
     preexec_functions+=(__termfx_preexec); precmd_functions+=(__termfx_post)
   else
     [[ -z $(trap -p DEBUG) ]] && trap '__termfx_debug' DEBUG
+    # shellcheck disable=SC2178  # PROMPT_COMMAND is an array in one branch and a string in the other
     if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then PROMPT_COMMAND+=(__termfx_post)
     else PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND%;}; }__termfx_post"; fi
   fi

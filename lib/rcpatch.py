@@ -7,8 +7,6 @@ except FileNotFoundError:
     orig = ""
 txt = re.sub(r"\n?" + re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", "\n", orig, flags=re.S)
 if mode in ("install", "clean"):
-    txt = re.sub(r"(?ms)^\n?# animated arch logo\n.*?^fi\n", "\n", txt)
-    txt = re.sub(r"(?m)^\n?# terminal ui\n(?:(?:alias |export |\[\[ -f /usr/share/fzf).*\n)+", "\n", txt)
     txt = re.sub(r'(?m)^[ \t]*eval "\$\(starship init (?:zsh|bash)\)"[ \t]*\n', "", txt)
     if not keep:
         txt = re.sub(r"(?m)^([ \t]*)((?:command[ \t]+)?(?:fastfetch|neofetch|pfetch|macchina|screenfetch|onefetch|nerdfetch)\b.*)$",

@@ -1,10 +1,4 @@
-"""Modular implementation of the termfx terminal engine."""
-from ._shared import *
-from ._system import *
-from ._color import *
-from ._art import *
-from ._info import *
-from ._layout import *
-from ._effects import *
-from ._render import *
+"""termfx engine: animated terminal header (ASCII art + live effects + system info)."""
 from ._commands import main
+
+__all__ = ["main"]

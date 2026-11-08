@@ -88,7 +88,7 @@ _termfx_hide_header() {
     print -n '\e[2K'
     ((i + 1 < h)) && print -n '\e[1B'
   done
-  print -n '\e8\e[r'
+  print -n '\e8'
 }
 _termfx_widget_cls() { _termfx_cls; zle reset-prompt }
 
@@ -139,7 +139,7 @@ _termfx_precmd() {
   fi
   _TFX_CMD_START=
 }
-_termfx_zshexit() { [[ -n ${TERMFX_FLAG:-} ]] && command rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"; print -n '\e[r'; }
+_termfx_zshexit() { [[ -n ${TERMFX_FLAG:-} ]] && command rm -f -- "$TERMFX_FLAG" "$TERMFX_FLAG.state"; print -n '\e7\e[r\e8'; }
 
 _termfx_hooks() {
   autoload -Uz add-zsh-hook

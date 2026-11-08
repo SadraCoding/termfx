@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # the checks are single-quoted on purpose: check() evals them later
 # tests/smoke.sh [path/to/install.sh]  - install into a throw-away HOME, check reset + restore
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 INSTALLER=${1:-./install.sh}
 INSTALLER=$(readlink -f "$INSTALLER")
 H=$(mktemp -d); trap 'rm -rf "$H"' EXIT
 fail=0
 check() { if eval "$2"; then echo "  ok   $1"; else echo "  FAIL $1"; fail=1; fi; }
-export HOME="$H" SHELL=/bin/bash TERM=xterm-256color XDG_CONFIG_HOME= XDG_DATA_HOME= XDG_CACHE_HOME=
+export HOME="$H" SHELL=/bin/bash TERM=xterm-256color
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME ZDOTDIR DISPLAY WAYLAND_DISPLAY
 
 # ---- a "messy" pre-existing setup
@@ -57,10 +58,14 @@ check "bash starts clean w/ header disabled" 'TERMFX_DISABLE=1 bash -ic "exit" >
 
 echo "== cli regressions"
 export PATH="$H/.local/bin:$PATH"
-check "custom #hex palette survives"   'termfx palette "#ff0080,#00e5ff,#7a00ff" >/dev/null && [[ $(termfx get palette) == "#ff0080,#00e5ff,#7a00ff" ]] && [[ $(python3 -c "
-import importlib.machinery as m, importlib.util as u
-l=m.SourceFileLoader(\"e\",\"$H/.local/bin/termfx-engine\"); s=u.spec_from_loader(\"e\",l); x=u.module_from_spec(s); l.exec_module(x)
-print(x.load_config()[\"palette\"])") == "#ff0080,#00e5ff,#7a00ff" ]]'
+check "custom #hex palette survives"   'termfx palette "#ff0080,#00e5ff,#7a00ff" >/dev/null && [[ $(termfx get palette) == "#ff0080,#00e5ff,#7a00ff" ]] && [[ $(python3 -I -c "
+import sys; sys.path.insert(0, \"$H/.local/bin\")
+from termfx_engine._system import load_config
+print(load_config()[\"palette\"])") == "#ff0080,#00e5ff,#7a00ff" ]]'
+check "palette next/prev cycle"        'termfx palette next >/dev/null 2>&1 && termfx palette prev >/dev/null 2>&1'
+check "empty values read back empty"   '[[ -z $(termfx get info_cmd) && -z $(termfx get info_rows) ]]'
+check "import skips command-running keys" 'termfx export "$H/x.json" >/dev/null && python3 -c "
+import json,sys; d=json.load(open(sys.argv[1])); d[\"info_cmd\"]=\"touch $H/pwned\"; json.dump(d,open(sys.argv[1],\"w\"))" "$H/x.json" && termfx import "$H/x.json" >/dev/null 2>&1; [[ -z $(termfx get info_cmd) && ! -e $H/pwned ]]'
 check "termfx effect fire works"       'termfx effect fire >/dev/null 2>&1 && [[ $(termfx get effect) == fire ]]'
 check "unknown effect is rejected"     '! termfx effect nope >/dev/null 2>&1'
 check "every theme exits 0"            '( for t in catppuccin tokyonight dracula nord gruvbox rosepine onedark mono; do termfx theme $t >/dev/null 2>&1 || exit 1; done )'

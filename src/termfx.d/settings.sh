@@ -1,15 +1,22 @@
+# shellcheck shell=bash
 cfg_get() { # value of KEY: "quoted" values are kept whole (they may contain #), otherwise a trailing " # comment" is dropped
   local v
   v=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" 2>/dev/null | tail -n1)
   case $v in
     \"*\"*) v=${v#\"}; v=${v%%\"*} ;;
     \'*\'*) v=${v#\'}; v=${v%%\'*} ;;
-    *) v=$(sed 's/[[:space:]]\{1,\}#.*$//; s/[[:space:]]*$//' <<<"$v") ;;
+    *) v=$(sed 's/^#\([[:space:]].*\)\{0,1\}$//; s/[[:space:]]\{1,\}#.*$//; s/[[:space:]]*$//' <<<"$v") ;;
   esac
   printf '%s\n' "$v"
 }
+# Before the first change of a run, keep a copy of the config so "termfx undo" can put it back.
+snapshot() {
+  [[ -z ${_TFX_SNAPSHOT:-} && -f $CONF ]] || return 0
+  _TFX_SNAPSHOT=1; cp -- "$CONF" "$CONF_DIR/config.undo" 2>/dev/null || true
+}
 cfg_set() {
   local k=$1 v=$2 tmp
+  snapshot
   # a value containing '#' must be quoted, or it would be read back as a comment
   case $v in \"*\"|\'*\') ;; *\#*) v="\"$v\"" ;; esac
   mkdir -p "$CONF_DIR"; touch "$CONF"
@@ -18,13 +25,29 @@ cfg_set() {
 }
 
 reload() {
-  local f="${TERMFX_FLAG:-}" p h par
+  local f="${TERMFX_FLAG:-}" p h
   if [[ -n $f && -r $f.state ]]; then
-    read -r p h par < "$f.state" || true
+    read -r p h _ < "$f.state" || true
     if [[ -n ${p:-} ]] && kill -USR1 "$p" 2>/dev/null; then ok "applied live (press Enter if the prompt looks shifted)"; return; fi
   fi
   say "${D}saved - will apply in new terminals (or run: exec \$SHELL)${Z}"
 }
+
+# change KEY VALUE - the one way every command changes a setting: it says what it did (KEY: old -> new).
+change() {
+  local k=$1 v=$2 old; old=$(cfg_get "$k")
+  [[ $old == "$v" ]] || cfg_set "$k" "$v" || die "could not write $CONF"
+  if [[ $old == "$v" ]]; then say "${G}✔${Z} ${B}$k${Z} is already ${v:-(default)} ${D}(unchanged)${Z}"
+  else say "${G}✔${Z} ${B}$k${Z}: ${D}${old:-(default)}${Z} → ${B}${v:-(default)}${Z}"; fi
+}
+# show_current KEY LABEL [HINT...] - what a command prints when you give it no value: the current value + how to change it.
+show_current() {
+  local k=$1 label=$2 v; v=$(cfg_get "$k"); shift 2
+  say "${B}$label${Z}: ${v:-(default)}"
+  local h; for h in "$@"; do say "  ${D}$h${Z}"; done
+}
+# yesno VALUE - normalise on/off/true/false/yes/no/1/0 to true|false ("" if not a switch value)
+yesno() { case ${1,,} in on|true|yes|1) echo true ;; off|false|no|0) echo false ;; esac; }
 
 regen() { have python3 || die "python3 needed"; CONF_DIR="$CONF_DIR" python3 "$THEMES" || die "theme generator failed"; reload; }
 cmd_fastfetch() {
@@ -106,7 +129,7 @@ choose() { # KEY NAME LISTCMD...
   local all; all=$("$@" | awk '{print $1}')
   [[ $n =~ ^[0-9]+$ ]] && { local nn; nn=$(sed -n "${n}p" <<<"$all"); [[ -n $nn ]] && n=$nn; }
   grep -qx -- "$n" <<<"$all" || die "unknown '$n' (try: list)"
-  cfg_set "$k" "$n"; ok "$k = $n"; regen
+  change "$k" "$n"; regen
 }
 
 STARSHIP_MODULE_NAMES="username hostname localip shlvl singularity kubernetes nats directory vcsh fossil_branch fossil_metrics git_branch git_commit git_state git_metrics git_status hg_branch hg_state pijul_channel docker_context package bun c cmake cobol cpp daml dart deno dotnet elixir elm erlang fennel fortran gleam golang gradle haskell haxe helm java julia kotlin lua maven mojo nim nodejs ocaml odin opa perl php pulumi purescript python quarto raku rlang red ruby rust scala solidity swift terraform typst vlang vagrant xmake zig buf guix_shell nix_shell conda pixi meson spack memory_usage aws gcloud openstack azure direnv env_var mise crystal sudo cmd_duration line_break jobs battery time status container netns os shell"
@@ -185,7 +208,7 @@ cmd_starship() {
         say "  generated files: $CONF_DIR/starship-themes/"
         return
       fi
-      [[ $name =~ ^[a-z0-9-]+$ ]] && grep -q "^$name[[:space:]]" <<<"$valid" || die "unknown Starship theme '$name' (termfx starship theme list)"
+      [[ $name =~ ^[a-z0-9-]+$ ]] && grep -q "^${name}[[:space:]]" <<<"$valid" || die "unknown Starship theme '$name' (termfx starship theme list)"
       modules=$(CONF_DIR="$CONF_DIR" python3 "$THEMES" --starship-modules "$name") || die "could not load Starship theme '$name'"
       style=$(CONF_DIR="$CONF_DIR" python3 "$THEMES" --starship-style "$name") || die "could not load Starship theme '$name'"
       cfg_set starship_theme "$name"; cfg_set starship_modules "$modules"
@@ -196,13 +219,19 @@ cmd_starship() {
       [[ -n $current ]] || current=$STARSHIP_DEFAULT_MODULES
       case $action in
         list|show)
-          local m; for m in $STARSHIP_MODULE_NAMES; do
-            if [[ " $current " == *" $m "* ]]; then printf '  %s %-18s enabled\n' "${G}●${Z}" "$m"
+          local m unsupported; unsupported=$(CONF_DIR="$CONF_DIR" python3 "$THEMES" --starship-unsupported 2>/dev/null)
+          for m in $STARSHIP_MODULE_NAMES; do
+            if [[ " $unsupported " == *" $m "* ]]; then printf '  %s %-18s %snot in your Starship version%s\n' "${D}×${Z}" "$m" "$D" "$Z"
+            elif [[ " $current " == *" $m "* ]]; then printf '  %s %-18s enabled\n' "${G}●${Z}" "$m"
             else printf '  %s %-18s disabled\n' "${D}○${Z}" "$m"; fi
           done ;;
         on|enable|off|disable)
           [[ -n $name ]] || die "usage: termfx starship module $action NAME"
           [[ " $STARSHIP_MODULE_NAMES " == *" $name "* ]] || die "unknown module '$name' (termfx starship module list)"
+          case $action in on|enable)
+            [[ " $(CONF_DIR="$CONF_DIR" python3 "$THEMES" --starship-unsupported 2>/dev/null) " == *" $name "* ]] \
+              && warn "module '$name' is not in your Starship version - it will be skipped (update Starship to use it)" ;;
+          esac
           local -a selected=(); local found=0 m
           for m in ${current//,/ }; do
             [[ $m == "$name" ]] && { found=1; continue; }
@@ -242,7 +271,7 @@ finish_art() { # file name use
   [[ -s $f ]] || { rm -f "$f"; die "nothing saved (empty input)"; }
   ok "saved: $f ($(wc -l < "$f") lines)"
   "$ENGINE" art-info "$n" 2>/dev/null | sed 's/^/   /'
-  if [[ $use == 1 ]]; then cfg_set art "$n"; "$ENGINE" prepare 2>/dev/null; ok "now using '$n'"; reload; fi
+  if [[ $use == 1 ]]; then change art "$n"; "$ENGINE" prepare 2>/dev/null; reload; fi
 }
 
 valid_palette() {

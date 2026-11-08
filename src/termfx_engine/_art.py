@@ -1,7 +1,13 @@
+import glob, hashlib, json, os, random, re, unicodedata
 from ._shared import (
-    ANSI_RE, ART_DIR, CACHE_DIR, CSI_ANY, FALLBACK_ART,
-    FRAME_RE, OSC_RE, UTF8, glob, hashlib, json,
-    os, random, re, unicodedata,
+    ANSI_RE,
+    ART_DIR,
+    CACHE_DIR,
+    CSI_ANY,
+    FALLBACK_ART,
+    FRAME_RE,
+    OSC_RE,
+    UTF8,
 )
 from ._system import (
     log_error,
@@ -290,10 +296,6 @@ def fit_art(cfg, frames, path, tw, th):
         except Exception:
             pass
     return res
-
-def load_art_frames(cfg, tw, th):
-    frames, path = load_art_source(cfg)
-    return fit_art(cfg, frames, path, tw, th), path
 
 def keep_sgr(s):
     s = OSC_RE.sub("", s)

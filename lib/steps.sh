@@ -1,6 +1,7 @@
+# shellcheck shell=bash
 # lib/steps.sh - shell/terminal integration, art wizard, finish message
 choose_shells() {
-  local login="${SHELL##*/}" s
+  local login="${SHELL:-}" s; login=${login##*/}
   TARGETS=()
   case $SHELLS in
     zsh) TARGETS=(zsh) ;; bash) TARGETS=(bash) ;; both) TARGETS=(zsh bash) ;;
@@ -19,7 +20,7 @@ integrate_shells() {
   for s in "${TARGETS[@]}"; do
     rc="$HOME/.${s}rc"; [[ $s == zsh ]] && rc="${ZDOTDIR:-$HOME}/.zshrc"
     local res; res=$(rc_patch "$rc" install "$CONF_DIR/init.$s" "$KEEP_FETCH")
-    ok "$s: $rc ($res; backup kept when changed)"
+    item ok "$s" "${rc/#$HOME/~}  ($res; backup kept when changed)"
   done
   if ((! KEEP_FETCH)); then
     local f
@@ -40,7 +41,7 @@ integrate_terminals() {
       cp -n "$f" "$f.termfx.bak" 2>/dev/null || true
       printf '\n# termfx\nconfig-file = ?%s/ghostty.conf\n' "$CONF_DIR" >> "$f"
     fi
-    ok "Ghostty: loads $CONF_DIR/ghostty.conf (your own settings stay untouched)"; did=1
+    item ok "Ghostty" "loads ${CONF_DIR/#$HOME/~}/ghostty.conf - your own settings stay untouched"; did=1
   fi
   if have kitty || [[ -d ${XDG_CONFIG_HOME:-$HOME/.config}/kitty ]]; then
     local d="${XDG_CONFIG_HOME:-$HOME/.config}/kitty" f
@@ -49,9 +50,9 @@ integrate_terminals() {
       cp -n "$f" "$f.termfx.bak" 2>/dev/null || true
       printf '\n# termfx\ninclude %s/kitty.conf\n' "$CONF_DIR" >> "$f"
     fi
-    ok "kitty: includes $CONF_DIR/kitty.conf"; did=1
+    item ok "kitty" "includes ${CONF_DIR/#$HOME/~}/kitty.conf"; did=1
   fi
-  ((did)) || info "no Ghostty/kitty found - for other terminals just pick the 'JetBrainsMono Nerd Font' font (theme snippets are in $CONF_DIR)"
+  ((did)) || { item skip "terminals" "no Ghostty / kitty found"; info "In other terminals just pick the 'JetBrainsMono Nerd Font' font."; }
 }
 
 ask() { # prompt default
@@ -79,7 +80,7 @@ art_wizard() {
 
   local names=() n i=0
   while IFS= read -r n; do names+=("$n"); done < <("$BIN_DIR/termfx-engine" list art)
-  printf '\n  %sChoose your header art:%s\n' "$CB" "$C0"
+  section "Header art"; printf '  %spick a number, or one of the letters below%s\n\n' "$CD" "$C0"
   for n in "${names[@]}"; do i=$((i+1)); printf '   %s%3d)%s %s\n' "$CM" "$i" "$C0" "$n"; done
   printf '   %s  p)%s paste my own ASCII art now\n   %s  f)%s load from a file / URL\n   %s  d)%s my distro logo (needs fastfetch)\n   %s  r)%s random each time\n' "$CM" "$C0" "$CM" "$C0" "$CM" "$C0" "$CM" "$C0"
   local c; c=$(ask "  choice [1]: " "1")
@@ -90,15 +91,15 @@ art_wizard() {
          if [[ -z $s ]]; then warn "no path given - keeping default art"
          else "$termfx" art add custom "$s" -u || warn "import failed"; fi ;;
     d|D) "$termfx" art distro || warn "could not get distro logo (is fastfetch installed?)" ;;
-    r|R) "$termfx" set art random >/dev/null; ok "art = random (picks a new one each terminal)" ;;
+    r|R) "$termfx" set art random >/dev/null; item ok "art" "random (a new one each terminal)" ;;
     ''|*[!0-9]*)
       if [[ -n $c && $c != 1 ]]; then warn "invalid choice '$c' - using #1 (${names[0]:-girl})"; fi
-      [[ ${#names[@]} -ge 1 ]] && { "$termfx" set art "${names[0]}" >/dev/null; ok "art = ${names[0]}"; } ;;
+      [[ ${#names[@]} -ge 1 ]] && { "$termfx" set art "${names[0]}" >/dev/null; item ok "art" "${names[0]}"; } ;;
     *) if ((c >= 1 && c <= ${#names[@]})); then
-         "$termfx" set art "${names[c-1]}" >/dev/null; ok "art = ${names[c-1]}"
+         "$termfx" set art "${names[c-1]}" >/dev/null; item ok "art" "${names[c-1]}"
        else
          warn "choice out of range - using #1 (${names[0]:-girl})"
-         [[ ${#names[@]} -ge 1 ]] && { "$termfx" set art "${names[0]}" >/dev/null; ok "art = ${names[0]}"; }
+         [[ ${#names[@]} -ge 1 ]] && { "$termfx" set art "${names[0]}" >/dev/null; item ok "art" "${names[0]}"; }
        fi ;;
   esac
 
@@ -108,7 +109,7 @@ art_wizard() {
       fx+=("$n"); descs+=("$line"); fxpal+=("$c")
     done < <("$BIN_DIR/termfx-engine" list effect-menu)
     ((${#fx[@]})) || fx=(aurora wave rainbow plasma fire matrix pulse static)
-    printf '\n  %s%s effects%s - pick a number or a name (Enter = aurora):\n' "$CB" "${#fx[@]}" "$C0"
+    section "Animated effect"; printf '  %s%s effects - pick a number or a name (Enter = aurora)%s\n\n' "$CD" "${#fx[@]}" "$C0"
     local i ecols; ecols=$(_tw)
     for i in "${!fx[@]}"; do
       if ((ecols >= 80)); then
@@ -119,11 +120,11 @@ art_wizard() {
     done
     c=$(ask "  effect [1=aurora]: " "1")
     if [[ $c =~ ^[0-9]+$ ]] && ((c >= 1 && c <= ${#fx[@]})); then
-      EFFECT=${fx[c-1]}; ok "effect = $EFFECT"
+      EFFECT=${fx[c-1]}; item ok "effect" "$EFFECT"
     elif [[ -n $c && $c != 1 ]]; then
       local found=0
       for n in "${fx[@]}"; do [[ $n == "$c" ]] && { EFFECT=$c; found=1; break; }; done
-      if ((found)); then ok "effect = $EFFECT"
+      if ((found)); then item ok "effect" "$EFFECT"
       else warn "unknown effect '$c' - using aurora"; EFFECT=aurora; fi
     else
       EFFECT=aurora
@@ -140,7 +141,7 @@ art_wizard() {
     if ((${#pals[@]})); then
       local pcols=${COLUMNS:-0}
       ((pcols > 0)) || pcols=$(tput cols 2>/dev/null || echo 80)
-      printf '\n  %s%s palettes%s - pick a number or a name (Enter = auto = best for the effect):\n' "$CB" "${#pals[@]}" "$C0"
+      section "Colour palette"; printf '  %s%s palettes - pick a number or a name (Enter = auto = best for the effect)%s\n\n' "$CD" "${#pals[@]}" "$C0"
       local p i h r g bl sw hx
       for i in "${!pals[@]}"; do
         sw=""; hx=""
@@ -154,7 +155,7 @@ art_wizard() {
         [[ -n $sw ]] && sw+=$C0
         hx=${hx% }
         if ((pcols >= 112)); then      # wide terminal: everything on one line
-          printf '   %s%3d)%s %-14s %s%d stops%s  %s%*s %s%s%s\n' "$CM" "$((i+1))" "$C0" "${pals[i]}" "$CD" "${pstops[i]}" "$C0" "$sw" "$(( (8 - ${pstops[i]}) * 2 ))" "" "$CD" "$hx" "$C0"
+          printf '   %s%3d)%s %-14s %s%d stops%s  %s%*s %s%s%s\n' "$CM" "$((i+1))" "$C0" "${pals[i]}" "$CD" "${pstops[i]}" "$C0" "$sw" "$(( (8 - pstops[i]) * 2 ))" "" "$CD" "$hx" "$C0"
         else                           # narrow terminal: hex values on their own line so nothing wraps
           printf '   %s%3d)%s %-14s %s%d stops%s  %s\n' "$CM" "$((i+1))" "$C0" "${pals[i]}" "$CD" "${pstops[i]}" "$C0" "$sw"
           printf '%s\n' "$hx" | fold -s -w "$((pcols > 16 ? pcols - 8 : 8))" | while IFS= read -r hl; do printf '        %s%s%s\n' "$CD" "${hl%"${hl##*[![:space:]]}"}" "$C0"; done
@@ -173,7 +174,7 @@ art_wizard() {
         for p in "${pals[@]}"; do [[ $p == "$c" ]] && { PALETTE=$c; pfound=1; break; }; done
         if ((!pfound)); then warn "unknown palette '$c' - using auto"; PALETTE=auto; fi
       fi
-      ok "palette = $PALETTE"
+      item ok "palette" "$PALETTE"
     fi
   fi
 
@@ -185,7 +186,7 @@ art_wizard() {
       fpdescs+=("$(printf '%s' "${line#* }" | sed 's/^[[:space:]]*//')")
     done < <(CONF_DIR="$CONF_DIR" python3 "$BIN_DIR/termfx-themes" --list fetch 2>/dev/null)
     if ((${#fpresets[@]})); then
-      printf '\n  %s%s Fastfetch panel presets%s (Enter = classic):\n' "$CB" "${#fpresets[@]}" "$C0"
+      section "Info panel"; printf '  %s%s fastfetch presets (Enter = classic)%s\n\n' "$CD" "${#fpresets[@]}" "$C0"
       local fi2
       for fi2 in "${!fpresets[@]}"; do
         printf '   %s%3d)%s %-14s %s%s%s\n' "$CM" "$((fi2+1))" "$C0" "${fpresets[$fi2]}" "$CD" "${fpdescs[$fi2]}" "$C0"
@@ -200,7 +201,7 @@ art_wizard() {
       else
         FETCH_PRESET=classic
       fi
-      ok "fetch preset = $FETCH_PRESET"
+      item ok "info panel" "$FETCH_PRESET"
     fi
   fi
 }
@@ -219,12 +220,12 @@ starship_theme_wizard() {
   while IFS= read -r n; do
     snames+=("${n%% *}"); d=${n#* }; sdescs+=("${d#"${d%%[![:space:]]*}"}")
   done < <(CONF_DIR="$CONF_DIR" python3 "$BIN_DIR/termfx-themes" --list starship)
-  printf '\n  %s%s Starship prompt themes%s - pick a number or a name:\n' "$CB" "${#snames[@]}" "$C0"
+  section "Prompt theme"; printf '  %s%s Starship themes - pick a number or a name%s\n\n' "$CD" "${#snames[@]}" "$C0"
   for i in "${!snames[@]}"; do
     printf '   %s%3d)%s %-20s %s%s%s%s\n' "$CM" "$((i+1))" "$C0" "${snames[i]}" "$CD" "${sdescs[i]}" "$C0" "$([[ ${snames[i]} == "$current" ]] && printf ' (current)')"
   done
   choice=$(ask "  theme [Enter keeps $current]: " "")
-  [[ -z $choice ]] && { info "keeping Starship theme: $current"; return 0; }
+  [[ -z $choice ]] && { item ok "prompt theme" "keeping $current"; return 0; }
   if [[ $choice =~ ^[0-9]+$ ]]; then
     if ((choice >= 1 && choice <= ${#snames[@]})); then choice=${snames[choice-1]}
     else warn "choice out of range - keeping $current"; return 0; fi
@@ -232,84 +233,66 @@ starship_theme_wizard() {
   "$BIN_DIR/termfx" starship theme "$choice"
 }
 
-_tool_line() { # cmd label
-  if have "$1"; then printf '    %s✔%s %-12s ready\n' "$CG" "$C0" "$2"
-  else printf '    %s·%s %-12s not installed (optional)\n' "$CD" "$C0" "$2"; fi
+# a tool's status as one grid cell:  ✔ starship
+_tool_cell() { # cmd label
+  if have "$1"; then printf '%s✔%s %-12s' "$CG" "$C0" "$2"
+  else printf '%s○ %-12s%s' "$CD" "$2" "$C0"; fi
 }
-
-# one aligned line of the summary: command (coloured) + padded description column
-_cmd() { printf '    %s%-40s%s %s\n' "$CC" "$1" "$C0" "$2"; }
+# one command row inside a rail:  ┃ command (coloured, padded)  what it does (dim)
+_cmd() {
+  if (( $(_cw) >= 72 )); then printf '  %s┃%s  %s%-34s%s %s%s%s\n' "$CM" "$C0" "$CC" "$1" "$C0" "$CD" "$2" "$C0"
+  else printf '  %s┃%s  %s%s%s\n  %s┃%s  %s  %s%s\n' "$CM" "$C0" "$CC" "$1" "$C0" "$CM" "$C0" "$CD" "$2" "$C0"; fi   # narrow: description under the command
+}
+_note() { printf '  %s┃%s  %s\n' "$CM" "$C0" "$*"; }
 
 finish_message() {
-  cat <<EOF
+  local w; w=$(_cw)
+  printf '\n\n  %s%s ✔  termfx %s installed %s\n' "$CG" "$CB" "$VERSION" "$C0"
+  printf '  %s%s%s\n' "$CG" "$(_rule $((w - 4)))" "$C0"
 
-${CG}${CB}  ✔ termfx $VERSION installed${C0}
+  section "Next step"
+  _note "Open a ${CB}new terminal${C0}  (or run ${CC}exec \$SHELL${C0})"
+  _note "${CD}needs a window of about 80×24; smaller windows hide the header${C0}"
 
-  ${CB}Open a new terminal${C0} (or run ${CC}exec \$SHELL${C0}) to see the animated header.
-  It needs a window of about ${CB}80×24${C0} or more; below that the header hides itself.
-  If p10k or oh-my-posh is still active (--keep-old), keep only one prompt tool.
+  section "What's ready"
+  local cells=(python3 starship fastfetch eza bat fzf) c i=0 per=3
+  ((w < 64)) && per=2
+  for c in "${cells[@]}"; do
+    if ((i % per == 0)); then printf '  %s┃%s  ' "$CM" "$C0"; fi
+    if [[ $c == bat ]]; then { have bat || have batcat; } && printf '%s✔%s %-12s' "$CG" "$C0" bat || printf '%s○ %-12s%s' "$CD" bat "$C0"
+    else _tool_cell "$c" "$c"; fi
+    i=$((i + 1)); if ((i % per == 0)); then printf '\n'; fi
+  done
+  ((i % per == 0)) || printf '\n'
+  _note "${CD}○ = optional and not installed; termfx falls back gracefully${C0}"
 
-  ${CB}What's ready${C0}
-EOF
-  _tool_line python3   python3
-  _tool_line starship  starship
-  _tool_line fastfetch fastfetch
-  _tool_line eza       eza
-  { have bat || have batcat; } && printf '    %s✔%s %-12s ready\n' "$CG" "$C0" "bat" \
-    || printf '    %s·%s %-12s not installed (optional)\n' "$CD" "$C0" "bat"
-  _tool_line fzf       fzf
-  local n_pal; n_pal=$("$BIN_DIR/termfx-engine" list palettes 2>/dev/null | grep -c .)
-  cat <<EOF
-
-  ${CB}Features & commands${C0}
-EOF
-  _cmd "termfx effect list"                 "list all animated effects"
-  _cmd "termfx effect next"                 "cycle through effects live"
-  _cmd "termfx effect info NAME"            "details + recommended palette"
-  _cmd "termfx palette list"                "${n_pal:-?} colour palettes"
-  _cmd "termfx palette show NAME"           "preview colours with gradient"
-  _cmd "termfx palette next"                "cycle through palettes"
-  _cmd "termfx preview effect=fire"         "full-screen preview (any key exits)"
-  _cmd "termfx theme list"                  "change shell/prompt colours"
-  _cmd "termfx starship theme list"         "browse named prompt themes"
-  _cmd "termfx starship theme cloud-ops"    "apply a Starship theme"
-  _cmd "termfx art add mine"                "paste your own ASCII art"
-  _cmd "termfx info items"                  "manage the system info panel"
-  _cmd "termfx info custom 'CMD'"           "custom info panel command"
-  _cmd "termfx randomize"                   "instant random look"
-  _cmd "termfx profile save work"           "save/load config profiles"
-  _cmd "termfx --help"                      "full feature list"
-  cat <<EOF
-
-  ${CB}All effects${C0} (descriptions and recommended palettes):
-EOF
-  "$BIN_DIR/termfx" effect list
-  cat <<EOF
-
-  ${CB}All palettes${C0} (colour stop count and hex values):
-EOF
-  "$BIN_DIR/termfx-engine" list palette-details
-  local n_st n_ff
+  local n_pal n_st n_ff
+  n_pal=$("$BIN_DIR/termfx-engine" list palettes 2>/dev/null | grep -c .)
   n_st=$(python3 "$BIN_DIR/termfx-themes" --list starship 2>/dev/null | grep -c .)
   n_ff=$(python3 "$BIN_DIR/termfx-themes" --list fetch 2>/dev/null | grep -c .)
-  cat <<EOF
 
-  ${CB}Quick tips${C0}
-EOF
-  _cmd "termfx starship theme developer-forge" "one of ${n_st:-?} Starship themes"
-  _cmd "termfx starship set right_prompt true" "customize Starship controls"
-  _cmd "termfx fastfetch gamer"                "one of ${n_ff:-?} info panel presets"
-  _cmd "termfx glitch on"                      "random glitch distortions"
-  _cmd "termfx info-colors neon"               "colour the info panel"
-  _cmd "termfx set sparkle true"               "sparkle effect on the header"
-  _cmd "termfx set vignette true"              "cinematic edge darkening"
-  _cmd "termfx rotate on 60"                   "auto-rotate effects every 60s"
-  _cmd "termfx align center"                   "centre the header"
-  cat <<EOF
+  section "Change the look"
+  _cmd "termfx effect next"              "cycle animated effects live"
+  _cmd "termfx palette next"             "cycle through ${n_pal:-?} palettes"
+  _cmd "termfx randomize"                "instant random look"
+  _cmd "termfx preview effect=fire"      "full-screen preview (any key exits)"
 
-  Restore old setup:  ${CC}termfx restore${C0}
-  Uninstall:          ${CC}termfx uninstall${C0}
-  Something wrong?:   ${CC}termfx doctor${C0}
-EOF
-  case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "$BIN_DIR is not in your PATH yet - it will be after you open a new terminal." ;; esac
+  section "Prompt & info panel"
+  _cmd "termfx starship theme list"      "${n_st:-?} prompt themes"
+  _cmd "termfx fastfetch gamer"          "${n_ff:-?} info panel presets"
+  _cmd "termfx theme list"               "shell / prompt colours"
+
+  section "Your own art"
+  _cmd "termfx art add mine"             "paste your own ASCII art"
+  _cmd "termfx art distro"               "use your distro's logo"
+
+  section "Safety net"
+  _cmd "termfx undo"                     "revert your last change"
+  _cmd "termfx restore"                  "put your old terminal setup back"
+  _cmd "termfx doctor"                   "diagnose a missing header"
+  _cmd "termfx uninstall"                "remove termfx"
+
+  printf '\n  %sEverything else:%s %stermfx help%s  %s(whole command list on one screen)%s\n' "$CD" "$C0" "$CC" "$C0" "$CD" "$C0"
+  case ":$PATH:" in *":$BIN_DIR:"*) ;; *) printf '\n'; warn "$BIN_DIR is not in your PATH yet - it will be after you open a new terminal." ;; esac
+  printf '\n'
 }

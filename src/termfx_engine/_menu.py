@@ -3,8 +3,15 @@
 Numbered rows, colour swatches, descriptions and a marker on the value that is in use.
 When stdout is not a terminal the output stays plain (no colour codes), so it can still be piped."""
 
+import os
+import re
+import sys
 from ._shared import (
-    EFFECTS, EFFECT_DESC, EFFECT_PALETTE, OFF_NAMES, PALETTES, os, sys,
+    EFFECTS,
+    EFFECT_DESC,
+    EFFECT_PALETTE,
+    OFF_NAMES,
+    PALETTES,
 )
 from ._system import term_size
 from ._color import COLORS, build_lut, hex_rgb, palette_stops, to256, truecolor_on
@@ -126,14 +133,13 @@ def cmd_menu_colors(cfg):
         parts = []
         for n, h in items[start:start + percol]:
             mark = (st.G + "●" + st.Z) if n == cur else " "
-            parts.append(" %s%s %s %-12s %s#%s%s" % (mark, st.bg(h, "    "), "", n, st.D, h, st.Z))
+            parts.append(" %s%s %-12s %s#%s%s" % (mark, st.bg(h, "    "), n, st.D, h, st.Z))
         print("".join(p + " " * max(0, cellw - _vis(p)) for p in parts[:-1]) + parts[-1])
     print("\n  %scombine them:  termfx palette red,white,#00e5ff     any hex:  termfx palette \"#ff8800\"%s" % (st.D, st.Z))
     return 0
 
 
 def _vis(s):
-    import re
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 

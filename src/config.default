@@ -10,7 +10,7 @@ fps       = 20           # 2..60 (lower = less CPU)
 intensity = 1.0          # brightness 0.3 .. 2.5
 
 # --- Fastfetch system panel
-info       = fastfetch   # fastfetch | auto | builtin | off
+info       = auto        # auto (fastfetch, else neofetch, else built-in) | fastfetch | builtin | off
 fetch_preset = classic    # panel preset: classic compact minimal clean full gamer server developer aesthetic hybridfetch ultra  (termfx fastfetch list)
 info_config = auto       # auto = generated termfx Fastfetch config; or set a Fastfetch JSONC path
 info_rows  =             # override rows manually (comma-separated); empty = preset decides

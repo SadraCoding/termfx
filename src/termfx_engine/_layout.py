@@ -1,6 +1,4 @@
-from ._system import (
-    as_bool, as_int,
-)
+from ._system import as_bool, cfg_int
 from ._art import (
     art_dims, fit_art, is_braille_art, load_art_source, trim_trailing, visible_width,
 )
@@ -30,15 +28,15 @@ def build_layout(cfg, cols, rows, force=False):
     if not force:
         if not as_bool(cfg["enabled"]):
             return None
-        if cols < as_int(cfg["min_cols"], 90) or rows < as_int(cfg["min_rows"], 30):
+        if cols < cfg_int(cfg, "min_cols") or rows < cfg_int(cfg, "min_rows"):
             return None
-    cap = max(6, rows - as_int(cfg["reserve"], 12))          # tallest header the terminal can spare
-    gap = max(1, as_int(cfg["info_gap"], 4))
-    th_max = max(4, min(as_int(cfg["max_height"], 24), cap))
+    cap = max(6, rows - cfg_int(cfg, "reserve"))          # tallest header the terminal can spare
+    gap = max(1, cfg_int(cfg, "info_gap"))
+    th_max = max(4, min(cfg_int(cfg, "max_height"), cap))
     total = max(12, cols - 1)                                # keep the last column free
     src, path = load_art_source(cfg)
     sw, sh = art_dims(src)
-    uw = as_int(cfg["max_width"], 0)
+    uw = cfg_int(cfg, "max_width")
     wcap = uw if uw > 0 else max(cols // 2, min(sw, (cols * 3) // 4))
     wcap = max(6, min(wcap, total - 2))                      # the art box is art + 2 spare columns
 

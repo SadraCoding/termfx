@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lib/reset.sh - back up + reset old terminal customizations, and restore them
 BACKUP_ROOT="$HOME/.termfx-backup"
 
@@ -32,7 +33,7 @@ write_clean_defaults() {
   # only recreate a zshrc when the user actually uses zsh - otherwise bash-only
   # users with zsh installed would get both shells patched by --shell auto
   local write_zsh=0 zrc="${ZDOTDIR:-$HOME}/.zshrc"
-  case ${SHELL##*/} in zsh) write_zsh=1 ;; esac
+  case ${SHELL:-} in */zsh|zsh) write_zsh=1 ;; esac
   case ${SHELLS:-auto} in zsh|both) write_zsh=1 ;; esac
   if [[ -f $BACKUP_ROOT/latest/MANIFEST ]] && grep -qE '(^|/)\.zshrc$' "$BACKUP_ROOT/latest/MANIFEST" 2>/dev/null; then
     write_zsh=1
